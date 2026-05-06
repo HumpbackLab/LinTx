@@ -123,10 +123,10 @@ pub fn usb_gamepad_main(argc: u32, argv: *const &str) {
         if counter == 1 {
             thread_logln!(
                 "✓ Received first mixer data! thrust={}, dir={}, ail={}, elev={}",
-                msg.thrust,
-                msg.direction,
-                msg.aileron,
-                msg.elevator
+                msg.channels[2],
+                msg.channels[3],
+                msg.channels[0],
+                msg.channels[1]
             );
         }
 
@@ -142,10 +142,10 @@ pub fn usb_gamepad_main(argc: u32, argv: *const &str) {
         //   aileron   = Aileron/Roll (CH1 in AETR)
         //   elevator  = Elevator/Pitch (CH2 in AETR)
 
-        report.left_x = mixer_to_hid_axis(msg.direction); // 左摇杆X = Rudder
-        report.left_y = mixer_throttle_to_hid_axis(msg.thrust); // 左摇杆Y = Throttle
-        report.right_x = mixer_to_hid_axis(msg.aileron); // 右摇杆X = Aileron
-        report.right_y = mixer_to_hid_axis(msg.elevator); // 右摇杆Y = Elevator
+        report.left_x = mixer_to_hid_axis(msg.channels[3]); // 左摇杆X = Rudder
+        report.left_y = mixer_throttle_to_hid_axis(msg.channels[2]); // 左摇杆Y = Throttle
+        report.right_x = mixer_to_hid_axis(msg.channels[0]); // 右摇杆X = Aileron
+        report.right_y = mixer_to_hid_axis(msg.channels[1]); // 右摇杆Y = Elevator
         report._reserved = 0; // 填充字节
 
         // 暂时没有按键数据，保持为0

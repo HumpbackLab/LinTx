@@ -8,6 +8,10 @@ use super::{
     ControlRole, CurveRef, MixerOutput, ModelConfig, OutputProtocol, RadioConfig, RateProfile,
 };
 
+#[cfg(test)]
+pub(crate) static TEST_CWD_MUTEX: std::sync::LazyLock<std::sync::Mutex<()>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
+
 pub const RADIO_CONFIG_PATH: &str = "radio.toml";
 pub const MODELS_DIR: &str = "models";
 
@@ -206,12 +210,7 @@ fn sample_rover() -> ModelConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        sync::{LazyLock, Mutex},
-        time::{SystemTime, UNIX_EPOCH},
-    };
-
-    static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
 
@@ -243,7 +242,7 @@ mod tests {
 
     #[test]
     fn test_ensure_default_layout_creates_models_and_radio() {
-        let _serial = TEST_MUTEX.lock().unwrap();
+        let _serial = TEST_CWD_MUTEX.lock().unwrap();
         let _guard = TestCwdGuard::new();
         ensure_default_layout().unwrap();
         assert!(Path::new(RADIO_CONFIG_PATH).exists());
@@ -254,7 +253,7 @@ mod tests {
 
     #[test]
     fn test_set_active_model_updates_radio_config() {
-        let _serial = TEST_MUTEX.lock().unwrap();
+        let _serial = TEST_CWD_MUTEX.lock().unwrap();
         let _guard = TestCwdGuard::new();
         ensure_default_layout().unwrap();
         let model = set_active_model("rover").unwrap();

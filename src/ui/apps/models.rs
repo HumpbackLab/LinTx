@@ -290,6 +290,7 @@ mod tests {
 
     #[test]
     fn test_open_applies_model_and_emits_success_feedback() {
+        let _serial = store::TEST_CWD_MUTEX.lock().unwrap();
         let _guard = TestCwdGuard::new();
         store::ensure_default_layout().expect("default layout");
 

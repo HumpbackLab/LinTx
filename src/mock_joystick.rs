@@ -1,8 +1,8 @@
 use crate::{
     client_process_args,
     messages::{
-        publish_input_frame, publish_input_status, AdcRawMsg, InputFrameMsg, InputHealth,
-        InputSource, InputStatusMsg,
+        publish_input_frame, publish_input_status, publish_rc_input_raw, AdcRawMsg, InputFrameMsg,
+        InputHealth, InputSource, InputStatusMsg, RcInputRawMsg,
     },
 };
 use clap::Parser;
@@ -41,6 +41,15 @@ struct MockConfig {
 struct StaticConfig {
     #[serde(default = "default_static_channels")]
     channels: Vec<i16>,
+
+    #[serde(default)]
+    switch_3pos: [u8; 4],
+
+    #[serde(default)]
+    switch_2pos: [bool; 2],
+
+    #[serde(default)]
+    buttons: u32,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -98,6 +107,9 @@ impl Default for StaticConfig {
     fn default() -> Self {
         Self {
             channels: default_static_channels(),
+            switch_3pos: [0; 4],
+            switch_2pos: [false; 2],
+            buttons: 0,
         }
     }
 }
@@ -161,6 +173,7 @@ pub fn mock_joystick_main(argc: u32, argv: *const &str) {
 
     let adc_raw_tx = get_new_tx_of_message::<AdcRawMsg>("adc_raw").unwrap();
     let input_frame_tx = get_new_tx_of_message::<InputFrameMsg>("input_frame").unwrap();
+    let rc_input_raw_tx = get_new_tx_of_message::<RcInputRawMsg>("rc_input_raw").unwrap();
     let input_status_tx = get_new_tx_of_message::<InputStatusMsg>("input_status").unwrap();
     let update_interval = Duration::from_millis(1000 / config.update_rate_hz as u64);
 
@@ -199,6 +212,7 @@ pub fn mock_joystick_main(argc: u32, argv: *const &str) {
             &config.static_config,
             &input_frame_tx,
             &adc_raw_tx,
+            &rc_input_raw_tx,
             update_interval,
         ),
         "sine" => run_sine_mode(
@@ -219,6 +233,7 @@ pub fn mock_joystick_main(argc: u32, argv: *const &str) {
                 &config.static_config,
                 &input_frame_tx,
                 &adc_raw_tx,
+                &rc_input_raw_tx,
                 update_interval,
             );
         }
@@ -229,15 +244,43 @@ fn run_static_mode(
     config: &StaticConfig,
     frame_tx: &rpos::channel::Sender<InputFrameMsg>,
     legacy_adc_tx: &rpos::channel::Sender<AdcRawMsg>,
+    rc_input_raw_tx: &rpos::channel::Sender<RcInputRawMsg>,
     interval: Duration,
 ) {
     let channels = config.channels.clone();
-    thread_logln!("Static mode: channels = {:?}", channels);
+    let axes = vec_to_axes(&channels);
+    let input = RcInputRawMsg {
+        axes,
+        switch_3pos: config.switch_3pos,
+        switch_2pos: config.switch_2pos,
+        buttons: config.buttons,
+        switches_present: true,
+    };
+    thread_logln!(
+        "Static mode: channels = {:?}, switch_3pos = {:?}, switch_2pos = {:?}",
+        channels,
+        input.switch_3pos,
+        input.switch_2pos
+    );
 
     loop {
-        publish_input_frame(frame_tx, Some(legacy_adc_tx), InputSource::Mock, &channels);
+        publish_rc_input_raw(
+            rc_input_raw_tx,
+            frame_tx,
+            Some(legacy_adc_tx),
+            InputSource::Mock,
+            input,
+        );
         std::thread::sleep(interval);
     }
+}
+
+fn vec_to_axes(channels: &[i16]) -> [i16; 4] {
+    let mut axes = [0i16; 4];
+    for (index, value) in channels.iter().copied().enumerate().take(axes.len()) {
+        axes[index] = value;
+    }
+    axes
 }
 
 fn run_sine_mode(

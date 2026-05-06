@@ -77,6 +77,49 @@ fn mixer_out_to_crsf(value: u16) -> u16 {
         + crsf::RcChannels::CHANNEL_VALUE_MIN as u32) as u16
 }
 
+fn mixer_channels_to_crsf(msg: &MixerOutMsg) -> [u16; 16] {
+    let mut channels = [crsf::RcChannels::CHANNEL_VALUE_MIN; 16];
+    for (index, value) in msg.channels.iter().copied().enumerate() {
+        channels[index] = mixer_out_to_crsf(value);
+    }
+    channels
+}
+
+#[cfg(test)]
+mod rc_channel_tests {
+    use super::*;
+
+    #[test]
+    fn test_mixer_out_to_crsf_handles_endpoints_and_midpoint() {
+        assert_eq!(mixer_out_to_crsf(0), crsf::RcChannels::CHANNEL_VALUE_MIN);
+        assert_eq!(
+            mixer_out_to_crsf(10000),
+            crsf::RcChannels::CHANNEL_VALUE_MAX
+        );
+
+        let midpoint = mixer_out_to_crsf(5000);
+        assert!(midpoint >= crsf::RcChannels::CHANNEL_VALUE_MID - 1);
+        assert!(midpoint <= crsf::RcChannels::CHANNEL_VALUE_MID + 1);
+    }
+
+    #[test]
+    fn test_mixer_channels_to_crsf_converts_all_16_channels() {
+        let msg = MixerOutMsg {
+            channels: [
+                0, 5000, 10000, 5000, 10000, 0, 5000, 10000, 0, 0, 0, 0, 0, 0, 0, 0,
+            ],
+        };
+
+        let channels = mixer_channels_to_crsf(&msg);
+
+        assert_eq!(channels[0], crsf::RcChannels::CHANNEL_VALUE_MIN);
+        assert_eq!(channels[1], mixer_out_to_crsf(5000));
+        assert_eq!(channels[2], crsf::RcChannels::CHANNEL_VALUE_MAX);
+        assert_eq!(channels[4], crsf::RcChannels::CHANNEL_VALUE_MAX);
+        assert_eq!(channels[15], crsf::RcChannels::CHANNEL_VALUE_MIN);
+    }
+}
+
 #[derive(Debug, Clone)]
 struct EditorState {
     buffer: Vec<u8>,
@@ -892,7 +935,6 @@ fn rf_link_service_main(argc: u32, argv: *const &str) {
         let mut link_monitor = LinkMonitorState::default();
         let mut serial_buf = Vec::<u8>::new();
         let mut read_buf = [0u8; 256];
-        let mut crsf_chn_values: [u16; 16] = [0; 16];
         let mut latest_mixer_out: Option<MixerOutMsg> = None;
         let mut last_state = ElrsStateMsg::default();
         let mut last_rc_frame_at: Option<Instant> = None;
@@ -1129,10 +1171,7 @@ fn rf_link_service_main(argc: u32, argv: *const &str) {
                     && rc_due
                 {
                     if let Some(msg) = latest_mixer_out {
-                        crsf_chn_values[0] = mixer_out_to_crsf(msg.aileron);
-                        crsf_chn_values[1] = mixer_out_to_crsf(msg.elevator);
-                        crsf_chn_values[2] = mixer_out_to_crsf(msg.thrust);
-                        crsf_chn_values[3] = mixer_out_to_crsf(msg.direction);
+                        let crsf_chn_values = mixer_channels_to_crsf(&msg);
 
                         let raw_packet = new_rc_channel_packet(&crsf_chn_values);
                         if let Err(err) =
@@ -1787,8 +1826,8 @@ mod tests {
         assert!(!state.link_active);
         assert_eq!(state.params[0].id, "rf_output");
         assert_eq!(state.params[0].value, "OFF");
-        assert_eq!(state.params[5].id, "link_state");
-        assert_eq!(state.params[5].value, "RF OFF");
+        assert_eq!(state.params[6].id, "link_state");
+        assert_eq!(state.params[6].value, "RF OFF");
     }
 
     #[test]

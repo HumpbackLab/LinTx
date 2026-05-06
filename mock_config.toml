@@ -13,6 +13,15 @@ update_rate_hz = 50
 # Channel values: [Throttle, Rudder, Aileron, Elevator]
 # CRSF range: 0-1984, centered at 992
 channels = [992, 992, 0, 992]
+# Four front 3-position switches: 0=low/off, 1=middle, 2=high.
+switch_3pos = [0, 0, 0, 0]
+# Left/right shoulder 2-position latching switches: false=off, true=on.
+switch_2pos = [false, false]
+# Buttons bitfield low 16 bits:
+# bit0..4=five-way 1 up/down/left/right/press,
+# bit5..9=five-way 2 up/down/left/right/press,
+# bit10..14=GUI five-way up/down/left/right/press.
+buttons = 0
 
 # Sine wave mode configuration 
 # Oscillates channels smoothly using sine waves

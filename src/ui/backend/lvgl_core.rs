@@ -444,10 +444,10 @@ impl LvglUiCore {
                         ),
                         format!(
                             "{}/{}/{}/{}",
-                            frame.mixer_out.thrust,
-                            frame.mixer_out.direction,
-                            frame.mixer_out.aileron,
-                            frame.mixer_out.elevator
+                            frame.mixer_out.channels[0],
+                            frame.mixer_out.channels[1],
+                            frame.mixer_out.channels[2],
+                            frame.mixer_out.channels[3]
                         ),
                     ],
                     metric_progress: [

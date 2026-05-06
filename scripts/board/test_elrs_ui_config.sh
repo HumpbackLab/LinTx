@@ -28,6 +28,9 @@ case "$INPUT_MODE" in
         ;;
 esac
 
+LINTX_SOCKET_PATH="$SOCKET_PATH" "$BIN" --detach -- rc_button_input \
+    >"$LOG_DIR/rc_button_input.log" 2>&1
+
 LINTX_SOCKET_PATH="$SOCKET_PATH" "$BIN" --detach -- mixer \
     >"$LOG_DIR/mixer.log" 2>&1
 

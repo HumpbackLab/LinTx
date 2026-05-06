@@ -74,12 +74,7 @@ impl Default for UiFrame {
             input_frame: InputFrameMsg::default(),
             elrs_feedback: ElrsFeedbackMsg::default(),
             interaction_feedback: None,
-            mixer_out: MixerOutMsg {
-                thrust: 5000,
-                direction: 5000,
-                aileron: 5000,
-                elevator: 5000,
-            },
+            mixer_out: MixerOutMsg::default(),
             model_entries: Vec::new(),
             model_focus_idx: 0,
             model_active_idx: 0,

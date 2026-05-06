@@ -12,16 +12,75 @@ use crate::{
         JoystickChannel::{self, *},
     },
     config::{store, ControlRole, ModelConfig, OutputLimits},
-    messages::{ActiveModelMsg, InputFrameMsg},
+    messages::{ActiveModelMsg, InputFrameMsg, RcInputRawMsg},
     CALIBRATE_FILENAME,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MixerOutMsg {
-    pub thrust: u16,
-    pub direction: u16,
-    pub aileron: u16,
-    pub elevator: u16,
+    pub channels: [u16; 16],
+}
+
+impl Default for MixerOutMsg {
+    fn default() -> Self {
+        let mut channels = [0u16; 16];
+        channels[0] = 5000;
+        channels[1] = 5000;
+        channels[3] = 5000;
+        Self { channels }
+    }
+}
+
+const THROTTLE_ARM_MAX: u16 = 500;
+
+pub fn two_pos_to_mixer(value: bool) -> u16 {
+    if value {
+        10000
+    } else {
+        0
+    }
+}
+
+pub fn three_pos_to_mixer(value: u8) -> u16 {
+    match value {
+        0 => 0,
+        1 => 5000,
+        _ => 10000,
+    }
+}
+
+#[cfg(test)]
+fn rc_input_from_axes(axes: [i16; 4]) -> RcInputRawMsg {
+    RcInputRawMsg {
+        axes,
+        ..RcInputRawMsg::default()
+    }
+}
+
+fn build_default_mixer_out(
+    primary_channels: [u16; 4],
+    rc_input: Option<&RcInputRawMsg>,
+) -> MixerOutMsg {
+    let mut channels = [0u16; 16];
+    channels[0] = primary_channels[0];
+    channels[1] = primary_channels[1];
+    channels[2] = primary_channels[2];
+    channels[3] = primary_channels[3];
+
+    if let Some(input) = rc_input.filter(|input| input.switches_present) {
+        channels[4] = two_pos_to_mixer(input.switch_2pos[0]);
+        channels[5] = three_pos_to_mixer(input.switch_3pos[0]);
+        channels[6] = three_pos_to_mixer(input.switch_3pos[1]);
+        channels[7] = three_pos_to_mixer(input.switch_3pos[2]);
+        channels[8] = three_pos_to_mixer(input.switch_3pos[3]);
+        channels[9] = two_pos_to_mixer(input.switch_2pos[1]);
+    }
+
+    if channels[2] > THROTTLE_ARM_MAX {
+        channels[4] = 0;
+    }
+
+    MixerOutMsg { channels }
 }
 
 fn cal_mixout(channel: JoystickChannel, raw: &InputFrameMsg, cal_data: &CalibrationData) -> u16 {
@@ -96,8 +155,18 @@ fn mixer_main(_argc: u32, _argv: *const &str) {
     };
 
     let rx = rpos::msg::get_new_rx_of_message::<InputFrameMsg>("input_frame").unwrap();
+    let rc_input = Arc::new(Mutex::new(None::<RcInputRawMsg>));
     let tx = rpos::msg::get_new_tx_of_message::<MixerOutMsg>("mixer_out").unwrap();
     let active_model = Arc::new(Mutex::new(load_initial_model()));
+
+    if let Some(rc_input_rx) = rpos::msg::get_new_rx_of_message::<RcInputRawMsg>("rc_input_raw") {
+        let rc_input_for_updates = rc_input.clone();
+        rc_input_rx.register_callback("mixer_rc_input", move |msg| {
+            if let Ok(mut current) = rc_input_for_updates.lock() {
+                *current = Some(*msg);
+            }
+        });
+    }
 
     if let Some(active_model_rx) =
         rpos::msg::get_new_rx_of_message::<ActiveModelMsg>("active_model")
@@ -112,28 +181,52 @@ fn mixer_main(_argc: u32, _argv: *const &str) {
 
     rx.register_callback("mixer_callback", move |x| {
         let current_model = active_model.lock().unwrap().clone();
-        let mixer_out = MixerOutMsg {
-            thrust: apply_output_profile(
-                cal_mixout(Thrust, x, &cal_data),
-                &current_model,
-                ControlRole::Thrust,
-            ),
-            direction: apply_output_profile(
-                cal_mixout(Direction, x, &cal_data),
-                &current_model,
-                ControlRole::Direction,
-            ),
-            aileron: apply_output_profile(
-                cal_mixout(Aileron, x, &cal_data),
-                &current_model,
-                ControlRole::Aileron,
-            ),
-            elevator: apply_output_profile(
-                cal_mixout(Elevator, x, &cal_data),
-                &current_model,
-                ControlRole::Elevator,
-            ),
-        };
+        let latest_rc_input = rc_input.lock().unwrap().to_owned();
+        let thrust = apply_output_profile(
+            cal_mixout(Thrust, x, &cal_data),
+            &current_model,
+            ControlRole::Thrust,
+        );
+        let direction = apply_output_profile(
+            cal_mixout(Direction, x, &cal_data),
+            &current_model,
+            ControlRole::Direction,
+        );
+        let aileron = apply_output_profile(
+            cal_mixout(Aileron, x, &cal_data),
+            &current_model,
+            ControlRole::Aileron,
+        );
+        let elevator = apply_output_profile(
+            cal_mixout(Elevator, x, &cal_data),
+            &current_model,
+            ControlRole::Elevator,
+        );
+        let mut mixer_out = build_default_mixer_out(
+            [aileron, elevator, thrust, direction],
+            latest_rc_input.as_ref(),
+        );
+        mixer_out.channels[4] =
+            apply_output_profile(mixer_out.channels[4], &current_model, ControlRole::Arm);
+        mixer_out.channels[5] = apply_output_profile(
+            mixer_out.channels[5],
+            &current_model,
+            ControlRole::FlightMode,
+        );
+        mixer_out.channels[6] =
+            apply_output_profile(mixer_out.channels[6], &current_model, ControlRole::Beeper);
+        mixer_out.channels[7] =
+            apply_output_profile(mixer_out.channels[7], &current_model, ControlRole::Turtle);
+        mixer_out.channels[8] =
+            apply_output_profile(mixer_out.channels[8], &current_model, ControlRole::Prearm);
+        mixer_out.channels[9] = apply_output_profile(
+            mixer_out.channels[9],
+            &current_model,
+            ControlRole::GpsRescue,
+        );
+        if mixer_out.channels[2] > THROTTLE_ARM_MAX {
+            mixer_out.channels[4] = 0;
+        }
         tx.send(mixer_out);
     });
 }
@@ -282,5 +375,62 @@ mod tests {
         let value = apply_output_profile(7000, &model, ControlRole::Elevator);
         assert!(value <= 10000);
         assert_ne!(value, 7000);
+    }
+
+    #[test]
+    fn test_two_position_switch_maps_to_channel_range() {
+        assert_eq!(two_pos_to_mixer(false), 0);
+        assert_eq!(two_pos_to_mixer(true), 10000);
+    }
+
+    #[test]
+    fn test_three_position_switch_maps_to_channel_range() {
+        assert_eq!(three_pos_to_mixer(0), 0);
+        assert_eq!(three_pos_to_mixer(1), 5000);
+        assert_eq!(three_pos_to_mixer(2), 10000);
+        assert_eq!(three_pos_to_mixer(3), 10000);
+    }
+
+    #[test]
+    fn test_default_without_switch_input_keeps_arm_safe() {
+        let input = rc_input_from_axes([0, 0, 0, 0]);
+        let output = build_default_mixer_out([5000, 5000, 0, 5000], Some(&input));
+
+        assert_eq!(output.channels.len(), 16);
+        assert_eq!(output.channels[4], 0);
+    }
+
+    #[test]
+    fn test_throttle_above_low_forces_disarm() {
+        let mut input = rc_input_from_axes([0, 0, 0, 0]);
+        input.switches_present = true;
+        input.switch_2pos[0] = true;
+
+        let output = build_default_mixer_out([5000, 5000, 1000, 5000], Some(&input));
+
+        assert_eq!(output.channels[4], 0);
+    }
+
+    #[test]
+    fn test_mixer_out_default_mapping_outputs_16_channels() {
+        let mut input = rc_input_from_axes([0, 0, 0, 0]);
+        input.switches_present = true;
+        input.switch_3pos = [1, 2, 0, 1];
+        input.switch_2pos = [true, true];
+
+        let output = build_default_mixer_out([6000, 4000, 0, 7000], Some(&input));
+
+        assert_eq!(output.channels.len(), 16);
+        assert_eq!(output.channels[0], 6000);
+        assert_eq!(output.channels[1], 4000);
+        assert_eq!(output.channels[2], 0);
+        assert_eq!(output.channels[3], 7000);
+        assert_eq!(output.channels[4], 10000);
+        assert_eq!(output.channels[5], 5000);
+        assert_eq!(output.channels[6], 10000);
+        assert_eq!(output.channels[7], 0);
+        assert_eq!(output.channels[8], 5000);
+        assert_eq!(output.channels[9], 10000);
+        assert_eq!(output.channels[10..], [0; 6]);
     }
 }

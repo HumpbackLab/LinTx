@@ -176,9 +176,16 @@ pub enum ControlRole {
     Aileron,
     Elevator,
     Arm,
-    Mode,
+    #[serde(alias = "mode")]
+    FlightMode,
+    Beeper,
+    Turtle,
+    Prearm,
+    GpsRescue,
     Aux1,
     Aux2,
+    Aux3,
+    Aux4,
     #[default]
     Unknown,
 }
@@ -337,6 +344,14 @@ impl Default for MixerConfig {
                 MixerOutput::new(ControlRole::Direction),
                 MixerOutput::new(ControlRole::Aileron),
                 MixerOutput::new(ControlRole::Elevator),
+                MixerOutput::new(ControlRole::Arm),
+                MixerOutput::new(ControlRole::FlightMode),
+                MixerOutput::new(ControlRole::Beeper),
+                MixerOutput::new(ControlRole::Turtle),
+                MixerOutput::new(ControlRole::Prearm),
+                MixerOutput::new(ControlRole::GpsRescue),
+                MixerOutput::new(ControlRole::Aux1),
+                MixerOutput::new(ControlRole::Aux2),
             ],
         }
     }
@@ -363,8 +378,16 @@ impl Default for OutputConfig {
                 ControlRole::Elevator,
                 ControlRole::Thrust,
                 ControlRole::Direction,
+                ControlRole::Arm,
+                ControlRole::FlightMode,
+                ControlRole::Beeper,
+                ControlRole::Turtle,
+                ControlRole::Prearm,
+                ControlRole::GpsRescue,
+                ControlRole::Aux1,
+                ControlRole::Aux2,
             ],
-            failsafe: vec![0, 0, 0, 0],
+            failsafe: vec![0; 12],
         }
     }
 }
@@ -495,7 +518,7 @@ mod tests {
                 ControlRole::Elevator,
             ]
         );
-        assert_eq!(config.mixer.outputs.len(), 4);
+        assert_eq!(config.mixer.outputs.len(), 12);
     }
 
     #[test]
@@ -518,5 +541,51 @@ mod tests {
         let cfg = ElrsUiConfig::default();
         assert_eq!(cfg.tx_max_power_mw, 1000);
         assert!(cfg.tx_power_mw <= cfg.tx_max_power_mw);
+    }
+
+    #[test]
+    fn test_control_role_aliases_keep_old_toml_compatible() {
+        #[derive(Deserialize)]
+        struct RoleHolder {
+            role: ControlRole,
+        }
+
+        assert_eq!(
+            toml::from_str::<RoleHolder>("role = \"mode\"")
+                .unwrap()
+                .role,
+            ControlRole::FlightMode
+        );
+        assert_eq!(
+            toml::from_str::<RoleHolder>("role = \"aux1\"")
+                .unwrap()
+                .role,
+            ControlRole::Aux1
+        );
+    }
+
+    #[test]
+    fn test_old_four_channel_model_config_reads_without_panicking() {
+        let toml = r#"
+id = "legacy"
+name = "Legacy"
+
+[[mixer.outputs]]
+role = "thrust"
+
+[[mixer.outputs]]
+role = "direction"
+
+[[mixer.outputs]]
+role = "aileron"
+
+[[mixer.outputs]]
+role = "elevator"
+"#;
+
+        let config: ModelConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.mixer.outputs.len(), 4);
+        assert_eq!(config.output.channel_order.len(), 12);
     }
 }

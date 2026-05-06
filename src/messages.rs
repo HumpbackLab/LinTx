@@ -6,6 +6,31 @@ pub struct AdcRawMsg {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RcInputRawMsg {
+    pub axes: [i16; 4],
+    pub switch_3pos: [u8; 4],
+    pub switch_2pos: [bool; 2],
+    pub buttons: u32,
+    pub switches_present: bool,
+}
+
+#[cfg(test)]
+mod rc_input_tests {
+    use super::*;
+
+    #[test]
+    fn test_rc_input_raw_defaults_to_safe_switches() {
+        let msg = RcInputRawMsg::default();
+
+        assert_eq!(msg.axes, [0; 4]);
+        assert_eq!(msg.switch_3pos, [0; 4]);
+        assert_eq!(msg.switch_2pos, [false; 2]);
+        assert_eq!(msg.buttons, 0);
+        assert!(!msg.switches_present);
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum InputSource {
     Adc,
     Stm32Serial,
@@ -132,6 +157,17 @@ pub fn publish_input_frame(
         }
         tx.send(AdcRawMsg { value });
     }
+}
+
+pub fn publish_rc_input_raw(
+    raw_tx: &rpos::channel::Sender<RcInputRawMsg>,
+    frame_tx: &rpos::channel::Sender<InputFrameMsg>,
+    legacy_adc_tx: Option<&rpos::channel::Sender<AdcRawMsg>>,
+    source: InputSource,
+    input: RcInputRawMsg,
+) {
+    raw_tx.send(input);
+    publish_input_frame(frame_tx, legacy_adc_tx, source, &input.axes);
 }
 
 pub fn publish_input_status(
@@ -322,6 +358,7 @@ pub enum ElrsCommandMsg {
 #[rpos::ctor::ctor]
 fn register() {
     rpos::msg::add_message::<AdcRawMsg>("adc_raw");
+    rpos::msg::add_message::<RcInputRawMsg>("rc_input_raw");
     rpos::msg::add_message::<InputFrameMsg>("input_frame");
     rpos::msg::add_message::<InputStatusMsg>("input_status");
     rpos::msg::add_message::<ElrsFeedbackMsg>("elrs_feedback");

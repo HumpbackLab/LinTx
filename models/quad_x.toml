@@ -73,6 +73,102 @@ max = 1000
 subtrim = 0
 reversed = false
 
+[[mixer.outputs]]
+role = "arm"
+weight = 100
+offset = 0
+curve = "linear"
+
+[mixer.outputs.limits]
+min = -1000
+max = 1000
+subtrim = 0
+reversed = false
+
+[[mixer.outputs]]
+role = "flight_mode"
+weight = 100
+offset = 0
+curve = "linear"
+
+[mixer.outputs.limits]
+min = -1000
+max = 1000
+subtrim = 0
+reversed = false
+
+[[mixer.outputs]]
+role = "beeper"
+weight = 100
+offset = 0
+curve = "linear"
+
+[mixer.outputs.limits]
+min = -1000
+max = 1000
+subtrim = 0
+reversed = false
+
+[[mixer.outputs]]
+role = "turtle"
+weight = 100
+offset = 0
+curve = "linear"
+
+[mixer.outputs.limits]
+min = -1000
+max = 1000
+subtrim = 0
+reversed = false
+
+[[mixer.outputs]]
+role = "prearm"
+weight = 100
+offset = 0
+curve = "linear"
+
+[mixer.outputs.limits]
+min = -1000
+max = 1000
+subtrim = 0
+reversed = false
+
+[[mixer.outputs]]
+role = "gps_rescue"
+weight = 100
+offset = 0
+curve = "linear"
+
+[mixer.outputs.limits]
+min = -1000
+max = 1000
+subtrim = 0
+reversed = false
+
+[[mixer.outputs]]
+role = "aux1"
+weight = 100
+offset = 0
+curve = "linear"
+
+[mixer.outputs.limits]
+min = -1000
+max = 1000
+subtrim = 0
+reversed = false
+
+[[mixer.outputs]]
+role = "aux2"
+weight = 100
+offset = 0
+curve = "linear"
+
+[mixer.outputs.limits]
+min = -1000
+max = 1000
+subtrim = 0
+reversed = false
+
 [output]
 protocol = "crsf"
 channel_order = [
@@ -80,8 +176,24 @@ channel_order = [
     "elevator",
     "thrust",
     "direction",
+    "arm",
+    "flight_mode",
+    "beeper",
+    "turtle",
+    "prearm",
+    "gps_rescue",
+    "aux1",
+    "aux2",
 ]
 failsafe = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
     0,
     0,
     0,

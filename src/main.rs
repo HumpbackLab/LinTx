@@ -24,6 +24,7 @@ mod lua_run;
 mod messages;
 mod mixer;
 mod mock_joystick;
+mod rc_button_input;
 mod stm32_serial;
 mod system_state_mock;
 mod ui;

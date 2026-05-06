@@ -10,6 +10,9 @@ start_server
 LINTX_SOCKET_PATH="$SOCKET_PATH" "$BIN" --detach -- mock_joystick \
     >"$LOG_DIR/input_mock.log" 2>&1
 
+LINTX_SOCKET_PATH="$SOCKET_PATH" "$BIN" --detach -- rc_button_input \
+    >"$LOG_DIR/rc_button_input.log" 2>&1
+
 LINTX_SOCKET_PATH="$SOCKET_PATH" "$BIN" --detach -- mixer \
     >"$LOG_DIR/mixer.log" 2>&1
 

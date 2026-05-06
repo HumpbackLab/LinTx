@@ -53,10 +53,10 @@ fn gamepad_main(_argc: u32, _argv: *const &str) {
         game_pad.update_report(
             0,
             &[
-                mix_out.thrust,
-                mix_out.direction,
-                mix_out.aileron,
-                mix_out.elevator,
+                mix_out.channels[2],
+                mix_out.channels[3],
+                mix_out.channels[0],
+                mix_out.channels[1],
             ],
         );
     }
