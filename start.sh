@@ -2,6 +2,7 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+APP_DIR="${APP_DIR:-$SCRIPT_DIR}"
 . "$SCRIPT_DIR/scripts/board/lib/board_common.sh"
 
 RF_DEV_NAME="${1:-/dev/ttyS2}"
@@ -11,6 +12,15 @@ STM32_DEV_NAME="${4:-/dev/ttyS0}"
 STM32_BAUDRATE="${5:-115200}"
 
 stop_lintx
+
+USB_GAMEPAD_SETUP="$SCRIPT_DIR/scripts/board/usb_gamepad/setup_hid_gamepad.sh"
+if [ -x "$USB_GAMEPAD_SETUP" ] || [ -f "$USB_GAMEPAD_SETUP" ]; then
+    if [ ! -c /dev/hidg0 ]; then
+        sh "$USB_GAMEPAD_SETUP" >"$LOG_DIR/hid_setup_start.log" 2>&1 || true
+        sleep 3
+    fi
+fi
+
 start_server
 
 case "$INPUT_MODE" in
@@ -33,6 +43,9 @@ LINTX_SOCKET_PATH="$SOCKET_PATH" "$BIN" --detach -- rc_button_input \
 
 LINTX_SOCKET_PATH="$SOCKET_PATH" "$BIN" --detach -- mixer \
     >"$LOG_DIR/mixer.log" 2>&1
+
+LINTX_SOCKET_PATH="$SOCKET_PATH" "$BIN" --detach -- usb_gamepad_control \
+    >"$LOG_DIR/usb_gamepad_control.log" 2>&1
 
 if ! LINTX_SOCKET_PATH="$SOCKET_PATH" "$BIN" --detach -- rf_link_service "$RF_DEV_NAME" --baudrate "$RF_BAUDRATE" \
     >"$LOG_DIR/rf_link_service.log" 2>&1; then

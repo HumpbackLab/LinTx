@@ -1,7 +1,7 @@
 use crate::{
     messages::{
         ElrsFeedbackMsg, ElrsStateMsg, InputFrameMsg, InputStatusMsg, SystemConfigMsg,
-        SystemStatusMsg,
+        SystemStatusMsg, UsbGamepadStateMsg,
     },
     mixer::MixerOutMsg,
     ui::feedback::UiFeedbackSnapshot,
@@ -13,7 +13,7 @@ pub enum AppId {
     Control,
     Models,
     Cloud,
-    Sensor,
+    UsbGamepad,
     Trainer,
     Scripts,
     About,
@@ -58,6 +58,7 @@ pub struct UiFrame {
     pub cloud_connected: bool,
     pub cloud_last_sync_secs: u64,
     pub elrs: ElrsStateMsg,
+    pub usb_gamepad: UsbGamepadStateMsg,
     pub debug: UiDebugStats,
 }
 
@@ -81,6 +82,7 @@ impl Default for UiFrame {
             cloud_connected: false,
             cloud_last_sync_secs: 0,
             elrs: ElrsStateMsg::default(),
+            usb_gamepad: UsbGamepadStateMsg::default(),
             debug: UiDebugStats::default(),
         }
     }

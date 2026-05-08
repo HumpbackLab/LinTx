@@ -10,6 +10,7 @@ use crate::{
     messages::{
         ActiveModelMsg, ElrsCommandMsg, ElrsFeedbackMsg, ElrsStateMsg, InputFrameMsg,
         InputStatusMsg, SystemConfigMsg, SystemStatusMsg, UiInteractionFeedback,
+        UsbGamepadCommandMsg, UsbGamepadStateMsg,
     },
     mixer::MixerOutMsg,
     ui::feedback::UiFeedbackController,
@@ -329,12 +330,14 @@ impl UiApp {
         active_model_tx: &Sender<ActiveModelMsg>,
         elrs_cmd_tx: &Sender<ElrsCommandMsg>,
         ui_feedback_tx: &Sender<UiInteractionFeedback>,
+        usb_gamepad_cmd_tx: &Sender<UsbGamepadCommandMsg>,
     ) {
         let ctx = UiAppContext {
             config_tx,
             active_model_tx,
             elrs_cmd_tx,
             ui_feedback_tx,
+            usb_gamepad_cmd_tx,
         };
         apps::handle_event(app, &mut self.frame, event, &ctx);
     }
@@ -346,6 +349,7 @@ impl UiApp {
         active_model_tx: &Sender<ActiveModelMsg>,
         elrs_cmd_tx: &Sender<ElrsCommandMsg>,
         ui_feedback_tx: &Sender<UiInteractionFeedback>,
+        usb_gamepad_cmd_tx: &Sender<UsbGamepadCommandMsg>,
     ) -> bool {
         match event {
             UiInputEvent::Quit => return false,
@@ -359,6 +363,7 @@ impl UiApp {
                             active_model_tx,
                             elrs_cmd_tx,
                             ui_feedback_tx,
+                            usb_gamepad_cmd_tx,
                         );
                     } else {
                         self.frame.page = UiPage::Launcher;
@@ -384,6 +389,7 @@ impl UiApp {
                         active_model_tx,
                         elrs_cmd_tx,
                         ui_feedback_tx,
+                        usb_gamepad_cmd_tx,
                     );
                 }
             }
@@ -398,6 +404,7 @@ impl UiApp {
                         active_model_tx,
                         elrs_cmd_tx,
                         ui_feedback_tx,
+                        usb_gamepad_cmd_tx,
                     );
                 }
             }
@@ -412,6 +419,7 @@ impl UiApp {
                         active_model_tx,
                         elrs_cmd_tx,
                         ui_feedback_tx,
+                        usb_gamepad_cmd_tx,
                     );
                 }
             }
@@ -426,6 +434,7 @@ impl UiApp {
                         active_model_tx,
                         elrs_cmd_tx,
                         ui_feedback_tx,
+                        usb_gamepad_cmd_tx,
                     );
                 }
             }
@@ -466,11 +475,15 @@ impl UiApp {
             get_new_rx_of_message::<ElrsFeedbackMsg>("elrs_feedback").unwrap();
         let mut mixer_out_rx = get_new_rx_of_message::<MixerOutMsg>("mixer_out").unwrap();
         let mut elrs_rx = get_new_rx_of_message::<ElrsStateMsg>("elrs_state").unwrap();
+        let mut usb_gamepad_state_rx =
+            get_new_rx_of_message::<UsbGamepadStateMsg>("usb_gamepad_state").unwrap();
         let mut injected_input_rx =
             get_new_rx_of_message::<UiInputEvent>("ui_input_event").unwrap();
         let config_tx = get_new_tx_of_message::<SystemConfigMsg>("system_config").unwrap();
         let active_model_tx = get_new_tx_of_message::<ActiveModelMsg>("active_model").unwrap();
         let elrs_cmd_tx = get_new_tx_of_message::<ElrsCommandMsg>("elrs_cmd").unwrap();
+        let usb_gamepad_cmd_tx =
+            get_new_tx_of_message::<UsbGamepadCommandMsg>("usb_gamepad_cmd").unwrap();
         let ui_feedback_tx =
             get_new_tx_of_message::<UiInteractionFeedback>("ui_interaction_feedback").unwrap();
         let mut ui_feedback_rx =
@@ -527,6 +540,10 @@ impl UiApp {
                 dirty |= Self::update_field(&mut self.frame.elrs, elrs);
             }
 
+            while let Some(usb_gamepad) = usb_gamepad_state_rx.try_read() {
+                dirty |= Self::update_field(&mut self.frame.usb_gamepad, usb_gamepad);
+            }
+
             while let Some(feedback) = ui_feedback_rx.try_read() {
                 self.feedback_controller
                     .submit(feedback, std::time::Instant::now());
@@ -548,6 +565,7 @@ impl UiApp {
                     &active_model_tx,
                     &elrs_cmd_tx,
                     &ui_feedback_tx,
+                    &usb_gamepad_cmd_tx,
                 ) {
                     backend.shutdown();
                     return;
@@ -562,6 +580,7 @@ impl UiApp {
                     &active_model_tx,
                     &elrs_cmd_tx,
                     &ui_feedback_tx,
+                    &usb_gamepad_cmd_tx,
                 ) {
                     backend.shutdown();
                     return;

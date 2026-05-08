@@ -1,7 +1,7 @@
 #!/bin/sh
 # LinTx HID Gamepad 开机自启脚本
-# 用来代替setup_hid_gamepad.sh，开机自启，不用再手动运行
-# 安装: cp init_hid_gamepad.sh /etc/init.d/ && chmod +x /etc/init.d/init_hid_gamepad.sh
+# 用来代替 scripts/board/usb_gamepad/setup_hid_gamepad.sh，开机自启，不用再手动运行
+# 安装: cp scripts/board/usb_gamepad/init_hid_gamepad.sh /etc/init.d/ && chmod +x /etc/init.d/init_hid_gamepad.sh
 # 自动运行：mv /etc/init.d/init_hid_gamepad.sh /etc/rc.d/S99_hid_gamepad.sh
 
 G0_DIR="/sys/kernel/config/usb_gadget/g0"

@@ -298,11 +298,13 @@ mod tests {
         let (active_model_tx, _active_model_rx) = Channel::new();
         let (elrs_cmd_tx, _elrs_cmd_rx) = Channel::new();
         let (ui_feedback_tx, mut ui_feedback_rx) = Channel::new();
+        let (usb_gamepad_cmd_tx, _usb_gamepad_cmd_rx) = Channel::new();
         let ctx = UiAppContext {
             config_tx: &config_tx,
             active_model_tx: &active_model_tx,
             elrs_cmd_tx: &elrs_cmd_tx,
             ui_feedback_tx: &ui_feedback_tx,
+            usb_gamepad_cmd_tx: &usb_gamepad_cmd_tx,
         };
 
         let mut frame = UiFrame::default();

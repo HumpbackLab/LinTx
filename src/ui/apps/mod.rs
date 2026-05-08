@@ -1,7 +1,10 @@
 use rpos::channel::Sender;
 
 use crate::{
-    messages::{ActiveModelMsg, ElrsCommandMsg, SystemConfigMsg, UiInteractionFeedback},
+    messages::{
+        ActiveModelMsg, ElrsCommandMsg, SystemConfigMsg, UiInteractionFeedback,
+        UsbGamepadCommandMsg,
+    },
     ui::{input::UiInputEvent, model::UiFrame},
 };
 
@@ -13,9 +16,9 @@ mod common;
 mod control;
 pub(crate) mod models;
 mod scripts;
-mod sensor;
 mod system;
 mod trainer;
+mod usb_gamepad;
 
 #[derive(Debug, Clone, Copy)]
 pub struct AppSpec {
@@ -38,6 +41,7 @@ pub struct UiAppContext<'a> {
     pub active_model_tx: &'a Sender<ActiveModelMsg>,
     pub elrs_cmd_tx: &'a Sender<ElrsCommandMsg>,
     pub ui_feedback_tx: &'a Sender<UiInteractionFeedback>,
+    pub usb_gamepad_cmd_tx: &'a Sender<UsbGamepadCommandMsg>,
 }
 
 pub trait UiAppModule: Sync {
@@ -55,7 +59,7 @@ pub const APP_SPECS: [AppSpec; 8] = [
     control::SPEC,
     models::SPEC,
     cloud::SPEC,
-    sensor::SPEC,
+    usb_gamepad::SPEC,
     trainer::SPEC,
     scripts::SPEC,
     about::SPEC,
@@ -67,7 +71,7 @@ const PAGE1_APPS: [AppId; 8] = [
     AppId::Control,
     AppId::Models,
     AppId::Cloud,
-    AppId::Sensor,
+    AppId::UsbGamepad,
     AppId::Trainer,
     AppId::Scripts,
     AppId::About,
@@ -94,7 +98,7 @@ pub fn module_of(id: AppId) -> &'static dyn UiAppModule {
         AppId::Control => &control::CONTROL_APP,
         AppId::Models => &models::MODELS_APP,
         AppId::Cloud => &cloud::CLOUD_APP,
-        AppId::Sensor => &sensor::SENSOR_APP,
+        AppId::UsbGamepad => &usb_gamepad::USB_GAMEPAD_APP,
         AppId::Trainer => &trainer::TRAINER_APP,
         AppId::Scripts => &scripts::SCRIPTS_APP,
         AppId::About => &about::ABOUT_APP,

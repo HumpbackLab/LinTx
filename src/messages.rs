@@ -355,6 +355,28 @@ pub enum ElrsCommandMsg {
     Activate,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UsbGamepadCommandMsg {
+    Start,
+    Stop,
+    Toggle,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct UsbGamepadDriverCommandMsg {
+    pub generation: u32,
+    pub stop: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UsbGamepadStateMsg {
+    pub hid_ready: bool,
+    pub running: bool,
+    pub report_count: u32,
+    pub generation: u32,
+    pub detail: String,
+}
+
 #[rpos::ctor::ctor]
 fn register() {
     rpos::msg::add_message::<AdcRawMsg>("adc_raw");
@@ -367,6 +389,9 @@ fn register() {
     rpos::msg::add_message::<ActiveModelMsg>("active_model");
     rpos::msg::add_message::<ElrsStateMsg>("elrs_state");
     rpos::msg::add_message::<ElrsCommandMsg>("elrs_cmd");
+    rpos::msg::add_message::<UsbGamepadCommandMsg>("usb_gamepad_cmd");
+    rpos::msg::add_message::<UsbGamepadDriverCommandMsg>("usb_gamepad_driver_cmd");
+    rpos::msg::add_message::<UsbGamepadStateMsg>("usb_gamepad_state");
     rpos::msg::add_message::<UiInteractionFeedback>("ui_interaction_feedback");
 }
 

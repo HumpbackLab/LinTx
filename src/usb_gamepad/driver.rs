@@ -1,8 +1,17 @@
-use crate::{client_process_args, mixer::MixerOutMsg};
+use crate::{
+    client_process_args,
+    messages::{UsbGamepadDriverCommandMsg, UsbGamepadStateMsg},
+    mixer::MixerOutMsg,
+};
 use clap::Parser;
-use rpos::{msg::get_new_rx_of_message, thread_logln};
+use rpos::{
+    msg::{get_new_rx_of_message, get_new_tx_of_message},
+    thread_logln,
+};
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::Path;
+use std::time::{Duration, Instant};
 
 #[derive(Parser)]
 #[command(name="usb_gamepad", about = "USB HID Gamepad output driver", long_about = None)]
@@ -10,6 +19,10 @@ struct Cli {
     /// HID device path
     #[arg(short, long, default_value = "/dev/hidg0")]
     device: String,
+
+    /// Driver generation used to ignore stale stop commands
+    #[arg(long, default_value_t = 0)]
+    generation: u32,
 }
 
 /// USB HID Gamepad Report Format (7 bytes) - PS4/PS5 风格布局:
@@ -82,6 +95,23 @@ fn mixer_throttle_to_hid_axis(mixer_value: u16) -> i8 {
     hid_value.clamp(-127, 127) as i8
 }
 
+fn publish_state(
+    state_tx: &rpos::channel::Sender<UsbGamepadStateMsg>,
+    device: &str,
+    running: bool,
+    report_count: u32,
+    generation: u32,
+    detail: impl Into<String>,
+) {
+    state_tx.send(UsbGamepadStateMsg {
+        hid_ready: Path::new(device).exists(),
+        running,
+        report_count,
+        generation,
+        detail: detail.into(),
+    });
+}
+
 pub fn usb_gamepad_main(argc: u32, argv: *const &str) {
     let arg_ret = client_process_args::<Cli>(argc, argv);
     if arg_ret.is_none() {
@@ -93,11 +123,35 @@ pub fn usb_gamepad_main(argc: u32, argv: *const &str) {
     thread_logln!("USB Gamepad driver starting...");
     thread_logln!("  Device: {}", args.device);
 
+    let state_tx = match get_new_tx_of_message::<UsbGamepadStateMsg>("usb_gamepad_state") {
+        Some(tx) => tx,
+        None => {
+            thread_logln!("Failed to publish usb_gamepad_state");
+            return;
+        }
+    };
+    let mut cmd_rx =
+        match get_new_rx_of_message::<UsbGamepadDriverCommandMsg>("usb_gamepad_driver_cmd") {
+            Some(rx) => rx,
+            None => {
+                thread_logln!("Failed to subscribe usb_gamepad_driver_cmd");
+                return;
+            }
+        };
+
     // 订阅 mixer 输出消息
     let mut mixer_rx = match get_new_rx_of_message::<MixerOutMsg>("mixer_out") {
         Some(rx) => rx,
         None => {
             thread_logln!("Failed to subscribe to mixer_out");
+            publish_state(
+                &state_tx,
+                &args.device,
+                false,
+                0,
+                args.generation,
+                "mixer_out unavailable",
+            );
             return;
         }
     };
@@ -107,17 +161,62 @@ pub fn usb_gamepad_main(argc: u32, argv: *const &str) {
         Ok(f) => f,
         Err(e) => {
             thread_logln!("Failed to open HID device {}: {}", args.device, e);
-            thread_logln!("Please run gamepad_composite.sh first!");
+            thread_logln!("Please run scripts/board/usb_gamepad/setup_hid_gamepad.sh first!");
+            publish_state(
+                &state_tx,
+                &args.device,
+                false,
+                0,
+                args.generation,
+                format!("open {} failed: {}", args.device, e),
+            );
             return;
         }
     };
 
     thread_logln!("USB Gamepad ready, waiting for mixer data...");
+    publish_state(
+        &state_tx,
+        &args.device,
+        true,
+        0,
+        args.generation,
+        "USB gamepad running",
+    );
 
     let mut counter = 0u32;
+    let mut last_state_publish = Instant::now();
     loop {
-        // rpos::Receiver 使用 .read() 方法，而不是 .recv()
-        let msg = mixer_rx.read();
+        while let Some(cmd) = cmd_rx.try_read() {
+            if cmd.stop && cmd.generation == args.generation {
+                thread_logln!("USB Gamepad stop requested");
+                publish_state(
+                    &state_tx,
+                    &args.device,
+                    false,
+                    counter,
+                    args.generation,
+                    "USB gamepad stopped",
+                );
+                return;
+            }
+        }
+
+        let Some(msg) = mixer_rx.try_read() else {
+            if last_state_publish.elapsed() >= Duration::from_secs(1) {
+                publish_state(
+                    &state_tx,
+                    &args.device,
+                    true,
+                    counter,
+                    args.generation,
+                    "USB gamepad running",
+                );
+                last_state_publish = Instant::now();
+            }
+            std::thread::sleep(Duration::from_millis(10));
+            continue;
+        };
 
         counter += 1;
         if counter == 1 {
@@ -156,10 +255,28 @@ pub fn usb_gamepad_main(argc: u32, argv: *const &str) {
         let report_bytes = report.to_bytes();
         if let Err(e) = hid_device.write_all(&report_bytes) {
             thread_logln!("Failed to write HID report: {}", e);
+            publish_state(
+                &state_tx,
+                &args.device,
+                false,
+                counter,
+                args.generation,
+                format!("write {} failed: {}", args.device, e),
+            );
+            return;
         }
 
         // 打印调试信息（每100次打印一次）
         if counter % 100 == 0 {
+            publish_state(
+                &state_tx,
+                &args.device,
+                true,
+                counter,
+                args.generation,
+                format!("sent {} HID reports", counter),
+            );
+            last_state_publish = Instant::now();
             thread_logln!(
                 "HID[{}]: LX={} LY={} RX={} RY={}",
                 counter,

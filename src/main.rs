@@ -14,8 +14,6 @@ mod crsf_rc_in;
 mod elrs;
 #[cfg(target_os = "linux")]
 mod elrs_tx;
-#[cfg(target_os = "linux")]
-mod gampad;
 #[cfg(all(target_os = "linux", feature = "joydev_input"))]
 mod joy_dev;
 mod joysticks_test;

@@ -83,7 +83,9 @@ sh ./scripts/board/stop_lintx.sh
 ```
 
 说明：
-- `start`：默认启动 `server + stm32_serial + rc_button_input + mixer + rf_link_service + ui_demo(fb)`，是板端完整启动入口。
+- `start`：默认启动 `server + stm32_serial + rc_button_input + mixer + usb_gamepad_control + rf_link_service + ui_demo(fb)`，是板端完整启动入口。
+- `start` 会在启动 LinTx 前尝试通过 `scripts/board/usb_gamepad/setup_hid_gamepad.sh` 初始化 `/dev/hidg0`，并启动 `usb_gamepad_control`；UI 中的 `USB PAD` 应用可查看 HID 状态并按 Enter 切换 `usb_gamepad` ON/OFF。
+- 开机自启也应调用 `/root/lintx/start`；该入口会固定工作目录，确保 `radio.toml` 和 `models/` 使用 `/root/lintx` 下的配置。
 - `test_elrs_ui_config.sh`：启动 `server + stm32_serial/mock + mixer + rf_link_service + ui_demo`，用于 ELRS 页面参数和 Bind 联调。推荐 `RF UART @ 115200`。
 - `test_input_mock.sh`：启动 `server + mock_joystick + mixer + ui_demo(fb)`，用于输入链验证。
 - `test_input_stm32.sh`：启动 `server + stm32_serial + mixer + ui_demo(fb)`，用于当前 TX 主输入链验证。
@@ -261,13 +263,13 @@ LinTx -- <模块名称> [模块参数]
 
 #### 7. `usb_gamepad` (USB HID 手柄输出)
 将混控后的数据输出到 USB HID 手柄设备，使从机模拟成 PC 可识别的游戏手柄。
-- **前置条件**: 需先运行 `gamepad_composite.sh` 配置 USB Gadget。
+- **前置条件**: 板端 `start` 会自动尝试运行 `scripts/board/usb_gamepad/setup_hid_gamepad.sh` 配置 USB Gadget；手工验证时也可直接运行该脚本。
 - **参数**:
   - `--device <设备路径>`: (可选) HID 设备路径，默认 `/dev/hidg0`。
 - **示例**:
   ```bash
   # 1. 配置 USB 复合设备（网络 + 手柄）
-  sh gamepad_composite.sh
+  sh scripts/board/usb_gamepad/setup_hid_gamepad.sh
   
   # 2. 启动完整流程：mock数据 -> mixer -> USB输出
   ./LinTx --server &
@@ -279,6 +281,9 @@ LinTx -- <模块名称> [模块参数]
   ./LinTx -- stm32_serial /dev/ttyS0 &
   ./LinTx -- mixer &
   ./LinTx -- usb_gamepad
+
+  # UI 方式：start 会启动 usb_gamepad_control，打开 USB PAD 应用后按 Enter 切换 ON/OFF
+  ./start
   ```
 - **通道映射** (mixer输出 → HID轴):
   - `thrust` (油门) → HID Rz轴

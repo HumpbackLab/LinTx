@@ -688,6 +688,62 @@ impl LvglUiCore {
                     feedback: frame.interaction_feedback.clone(),
                 }
             }
+            AppId::UsbGamepad => AppTemplateData {
+                accent: spec.accent,
+                badge: "USB HID".to_string(),
+                title: "USB Gamepad Output".to_string(),
+                subtitle: "Expose mixer output as /dev/hidg0".to_string(),
+                metric_titles: ["USB Gamepad".to_string(), "HID Device".to_string()],
+                metric_values: [
+                    if frame.usb_gamepad.running {
+                        "ON".to_string()
+                    } else {
+                        "OFF".to_string()
+                    },
+                    if frame.usb_gamepad.hid_ready {
+                        "READY".to_string()
+                    } else {
+                        "MISSING".to_string()
+                    },
+                ],
+                metric_progress: [
+                    if frame.usb_gamepad.running { 100 } else { 0 },
+                    if frame.usb_gamepad.hid_ready { 100 } else { 0 },
+                ],
+                list_title: "Output Chain".to_string(),
+                list_lines: [
+                    format!(
+                        "> Output: {}",
+                        if frame.usb_gamepad.running {
+                            "ON"
+                        } else {
+                            "OFF"
+                        }
+                    ),
+                    format!(
+                        "HID: /dev/hidg0 ({})",
+                        if frame.usb_gamepad.hid_ready {
+                            "ready"
+                        } else {
+                            "missing"
+                        }
+                    ),
+                    format!(
+                        "Reports: {} ({})",
+                        frame.usb_gamepad.report_count, frame.usb_gamepad.detail
+                    ),
+                    format!(
+                        "Mixer: {}/{}/{}/{}",
+                        frame.mixer_out.channels[0],
+                        frame.mixer_out.channels[1],
+                        frame.mixer_out.channels[2],
+                        frame.mixer_out.channels[3],
+                    ),
+                ],
+                list_row_ids: [Some("usb_gamepad_output".to_string()), None, None, None],
+                hint: "ENTER/LEFT/RIGHT: Toggle ON/OFF   Swipe right: Back".to_string(),
+                feedback: frame.interaction_feedback.clone(),
+            },
             _ => {
                 let spec = app_spec(app);
                 let badge = spec.title.to_string();

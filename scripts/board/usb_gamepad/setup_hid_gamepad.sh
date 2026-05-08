@@ -3,8 +3,8 @@
 # 作用：在现有 g0 gadget 上添加/更新 HID 手柄功能
 # 
 # 使用方法：
-#   sh setup_hid_gamepad.sh           # 添加或更新 HID 功能
-#   sh setup_hid_gamepad.sh --remove  # 移除 HID 功能
+#   sh scripts/board/usb_gamepad/setup_hid_gamepad.sh           # 添加或更新 HID 功能
+#   sh scripts/board/usb_gamepad/setup_hid_gamepad.sh --remove  # 移除 HID 功能
 
 set -e
 

@@ -41,7 +41,7 @@
 | 摇杆校准 | `src/calibrate.rs` | 已实现 | 生成 `joystick.toml` |
 | 基础混控 | `src/mixer.rs` | 部分实现 | 仅 4 通道线性归一化 |
 | CRSF/ELRS 发射链 | `src/elrs_tx.rs` | 部分实现 | `mixer_out -> CRSF RC -> 串口` |
-| USB HID 输出 | `src/usb_gamepad.rs` | 已实现 | 映射为 HID gamepad |
+| USB HID 输出 | `src/usb_gamepad/driver.rs` | 已实现 | 映射为 HID gamepad |
 | 系统状态消息 | `src/messages.rs`、`src/system_state_mock.rs` | 部分实现 | 主要还是 mock |
 | UI 框架 | `src/ui_demo.rs`、`src/ui/app.rs`、`src/ui/backend.rs` | 部分实现 | launcher + diagnostics + 少量交互 |
 | Windows 本地模式 | `src/main.rs` | 已实现 | 不依赖 Unix socket |
@@ -92,7 +92,7 @@
 | --- | --- | --- | --- |
 | 看 EdgeTX 如何抽象 RF/协议输出 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/pulses/pulses.cpp` | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/pulses/` 目录下具体协议文件 | 先看总入口，再看具体协议 |
 | 看 EdgeTX 模型如何持有模块配置 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/datastructs_private.h` | 无 | `moduleData` 是协议输出配置来源 |
-| 看 LinTx 当前实现 | `src/elrs_tx.rs` | `src/usb_gamepad.rs` | 目前没有统一“输出模块抽象” |
+| 看 LinTx 当前实现 | `src/elrs_tx.rs` | `src/usb_gamepad/driver.rs` | 目前没有统一“输出模块抽象” |
 
 ### 7. 遥测系统
 
