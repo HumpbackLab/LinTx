@@ -292,8 +292,8 @@ Important practical note:
 
 ## Files Changed (This Debug Round)
 
-- `src/elrs/mod.rs`
-- `src/elrs_tx.rs`
+- `src/output/elrs/protocol.rs`
+- `src/output/elrs/tx.rs`
 - `examples/elrs_magic.lua`
 - `docs/elrs_debug_status.md`
 

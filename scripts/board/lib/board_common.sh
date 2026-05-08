@@ -13,14 +13,27 @@ TOUCH_DEVICE="${TOUCH_DEVICE:-auto}"
 
 mkdir -p "$LOG_DIR"
 
+enter_app_dir() {
+    if [ ! -d "$APP_DIR" ]; then
+        echo "missing APP_DIR: $APP_DIR" >&2
+        exit 1
+    fi
+    cd "$APP_DIR"
+}
+
 stop_lintx() {
-    ps | awk '/LinTx/ && !/awk/ {print $1}' | while read -r pid; do
+    for comm in /proc/[0-9]*/comm; do
+        [ -r "$comm" ] || continue
+        [ "$(cat "$comm" 2>/dev/null || true)" = "LinTx" ] || continue
+        pid=${comm%/comm}
+        pid=${pid##*/}
         kill "$pid" 2>/dev/null || true
     done
     rm -f "$SOCKET_PATH"
 }
 
 start_server() {
+    enter_app_dir
     LINTX_SOCKET_PATH="$SOCKET_PATH" \
     LINTX_FB_ROTATE="$FB_ROTATE" \
     LINTX_FB_SWAP_RB="$FB_SWAP_RB" \
@@ -30,6 +43,7 @@ start_server() {
 }
 
 start_ui_fb() {
+    enter_app_dir
     touch_args=""
     touch_device="$TOUCH_DEVICE"
     if [ "$touch_device" = "auto" ]; then

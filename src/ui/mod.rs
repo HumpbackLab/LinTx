@@ -5,6 +5,7 @@ pub mod catalog;
 pub mod feedback;
 pub mod input;
 pub mod model;
+pub mod runner;
 
 pub fn debug_enabled() -> bool {
     let ui_flag = std::env::var("LINTX_UI_DEBUG")

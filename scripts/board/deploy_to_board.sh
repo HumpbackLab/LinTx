@@ -24,6 +24,7 @@ $SSH_CMD "mkdir -p '$BOARD_DIR'"
 tar \
     --exclude='./.git' \
     --exclude='./target' \
+    --exclude='*/target' \
     --exclude='./.DS_Store' \
     -cf - . \
     | sshpass -p "$BOARD_PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$BOARD_HOST" \

@@ -4,19 +4,19 @@
 
 ## 当前输入接口
 
-1. `adc`（`src/adc.rs`）
+1. `adc`（`src/input/adc.rs`）
    - 直接从 ADS1115（或板载 ADC）读取摇杆电压，刻度在 `ADCValue::channel()` 中被统一映射。
    - 作为主输入链的一部分，和 `joystick.toml` 校准文件配合用于 LinTx 的模拟摇杆物理量化。
-2. `stm32_serial`（`src/stm32_serial.rs`）
+2. `stm32_serial`（`src/input/stm32.rs`）
    - 从 STM32 侧的定制 UART 协议（帧头 `0x5A`）接收经过 ADC 采样一致化后的通道值，插入 mixer 前链路。
    - 当前方案把 STM32 视为主输入采样源，优先于 `adc`。
-3. `crsf_rc_in`（`src/crsf_rc_in.rs`）
+3. `crsf_rc_in`（`src/input/crsf_rc.rs`）
    - 作为兼容链路，将 CRSF/ELRS 所兼容的串口输入（形如 `CRSF RC` 往上传输）接入统一输入帧，使外部遥控器也能直接驱动 LinTx。
-4. `joy_dev`（`src/joy_dev.rs`，需开启 `joydev_input` feature）
+4. `joy_dev`（`src/input/joydev.rs`，需开启 `joydev_input` feature）
    - 利用 Linux `/dev/input/js*` 抽象读取 USB 手柄/摇杆，将其映射为 `InputFrame`，便于桌面调试或 trainer 模式。
-5. `mock_joystick`（`src/mock_joystick.rs`）
+5. `mock_joystick`（`src/input/mock.rs`）
    - 模拟输入源（`static`/`sine`/`step`），为验证输入链与 mixer/GUI 提供 deterministic 数据。
-6. `rf_link_service`（`src/elrs_tx.rs`）
+6. `rf_link_service`（`src/output/elrs/tx.rs`）
    - 发射侧从 `mixer_out` 生成 CRSF `RcChannels` 发往 ELRS 模块。
    - 同串口回传解析：可读取 CRSF 回传帧并更新基础 `system_status`，并发布输入侧 `elrs_feedback`（连接/信号/机载电池）。
 

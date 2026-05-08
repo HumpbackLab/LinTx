@@ -7,7 +7,7 @@ use std::{
 use rpos::thread_logln;
 
 use crate::{
-    calibrate::{
+    input::calibrate::{
         CalibrationData,
         JoystickChannel::{self, *},
     },
@@ -239,7 +239,7 @@ fn register() {
 
 #[cfg(test)]
 mod tests {
-    use crate::calibrate::ChannelInfo;
+    use crate::input::calibrate::ChannelInfo;
 
     use super::*;
     use rand::prelude::*;

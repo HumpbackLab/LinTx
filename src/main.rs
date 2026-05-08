@@ -5,35 +5,18 @@ use rpos::module::Module;
 use rpos::server_client::{server_init, Client};
 #[cfg(not(target_os = "windows"))]
 use std::io::ErrorKind;
-#[cfg(target_os = "linux")]
-mod adc;
-mod calibrate;
 mod config;
-mod crsf_rc_in;
-#[cfg(target_os = "linux")]
-mod elrs;
-#[cfg(target_os = "linux")]
-mod elrs_tx;
-#[cfg(all(target_os = "linux", feature = "joydev_input"))]
-mod joy_dev;
-mod joysticks_test;
-#[cfg(all(target_os = "linux", feature = "lua"))]
-mod lua_run;
+mod control;
+mod input;
 mod messages;
-mod mixer;
-mod mock_joystick;
-mod rc_button_input;
-mod stm32_serial;
-mod system_state_mock;
+#[cfg(target_os = "linux")]
+mod output;
+mod tools;
 mod ui;
-mod ui_demo;
-mod ui_emit_input;
+
+pub use control::mixer;
 #[cfg(target_os = "linux")]
-mod ui_input_fifo;
-#[cfg(target_os = "linux")]
-mod ui_key_input;
-#[cfg(target_os = "linux")]
-mod usb_gamepad;
+pub use output::elrs;
 
 pub const CALIBRATE_FILENAME: &str = "joystick.toml";
 

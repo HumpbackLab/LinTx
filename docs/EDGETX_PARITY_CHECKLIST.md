@@ -27,7 +27,7 @@
 | LinTx 主仓库 | `/home/shimmer/LinTx/LinTx_musl` | 当前开发仓库 |
 | EdgeTX 参考仓库 | `/home/shimmer/LinTx/EdgeTX_ref` | 只读参考 |
 | LinTx 主入口 | `src/main.rs` | 模块调度、client/server |
-| LinTx UI 入口 | `src/ui_demo.rs` | LVGL UI 入口 |
+| LinTx UI 入口 | `src/ui/runner.rs` | LVGL UI 入口 |
 | EdgeTX 主循环 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/main.cpp` | `perMain()` |
 | EdgeTX 主任务入口 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/tasks.cpp` | 周期任务与启动 |
 | EdgeTX 主数据结构 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/datastructs_private.h` | `ModelData` / `RadioData` |
@@ -37,13 +37,13 @@
 | 能力 | LinTx 位置 | 状态 | 备注 |
 | --- | --- | --- | --- |
 | 模块化运行时 | `src/main.rs`、`rpos/src/module.rs`、`rpos/src/msg.rs` | 已实现 | 模块注册、消息总线、Unix socket client/server |
-| 输入采集 | `src/adc.rs`、`src/stm32_serial.rs`、`src/crsf_rc_in.rs`、`src/mock_joystick.rs`、`src/joy_dev.rs` | 已实现 | 当前已统一到 `InputFrameMsg`；其中 `stm32_serial` 更符合 TX 主输入链，`crsf_rc_in` 属于外部 CRSF 输入兼容源 |
-| 摇杆校准 | `src/calibrate.rs` | 已实现 | 生成 `joystick.toml` |
-| 基础混控 | `src/mixer.rs` | 部分实现 | 仅 4 通道线性归一化 |
-| CRSF/ELRS 发射链 | `src/elrs_tx.rs` | 部分实现 | `mixer_out -> CRSF RC -> 串口` |
-| USB HID 输出 | `src/usb_gamepad/driver.rs` | 已实现 | 映射为 HID gamepad |
-| 系统状态消息 | `src/messages.rs`、`src/system_state_mock.rs` | 部分实现 | 主要还是 mock |
-| UI 框架 | `src/ui_demo.rs`、`src/ui/app.rs`、`src/ui/backend.rs` | 部分实现 | launcher + diagnostics + 少量交互 |
+| 输入采集 | `src/input/adc.rs`、`src/input/stm32.rs`、`src/input/crsf_rc.rs`、`src/input/mock.rs`、`src/input/joydev.rs` | 已实现 | 当前已统一到 `InputFrameMsg`；其中 `stm32_serial` 更符合 TX 主输入链，`crsf_rc_in` 属于外部 CRSF 输入兼容源 |
+| 摇杆校准 | `src/input/calibrate.rs` | 已实现 | 生成 `joystick.toml` |
+| 基础混控 | `src/control/mixer.rs` | 部分实现 | 仅 4 通道线性归一化 |
+| CRSF/ELRS 发射链 | `src/output/elrs/tx.rs` | 部分实现 | `mixer_out -> CRSF RC -> 串口` |
+| USB HID 输出 | `src/output/usb_gamepad/driver.rs` | 已实现 | 映射为 HID gamepad |
+| 系统状态消息 | `src/messages.rs`、`src/tools/system_state_mock.rs` | 部分实现 | 主要还是 mock |
+| UI 框架 | `src/ui/runner.rs`、`src/ui/app.rs`、`src/ui/backend/` | 部分实现 | launcher + diagnostics + 少量交互 |
 | Windows 本地模式 | `src/main.rs` | 已实现 | 不依赖 Unix socket |
 
 ## EdgeTX 核心功能与最小阅读路径
@@ -62,7 +62,7 @@
 | 目的 | 先读文件 | 再读文件 | 为什么读 |
 | --- | --- | --- | --- |
 | 看 EdgeTX 输入校准流程 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/gui/colorlcd/radio/radio_calibration.cpp` | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/gui/colorlcd/radio/radio_diaganas.cpp` | 校准状态机和诊断页都在这里 |
-| 看 LinTx 当前输入链 | `src/adc.rs`、`src/stm32_serial.rs`、`src/crsf_rc_in.rs` | `src/calibrate.rs` | 对照当前只有基础采样和校准 |
+| 看 LinTx 当前输入链 | `src/input/adc.rs`、`src/input/stm32.rs`、`src/input/crsf_rc.rs` | `src/input/calibrate.rs` | 对照当前只有基础采样和校准 |
 
 ### 3. 模型数据结构
 
@@ -77,7 +77,7 @@
 | --- | --- | --- | --- |
 | 看 EdgeTX 的 mix 主体 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/mixes.cpp` | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/model_init.cpp` | 一个负责 mix line，一个负责默认模型初始化 |
 | 看 EdgeTX 的输入编辑 UI 关联哪些概念 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/gui/colorlcd/model/input_edit.cpp` | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/gui/colorlcd/model/curveedit.cpp` | 用来反推最小可用配置面 |
-| 看 LinTx 当前 mixer | `src/mixer.rs` | `src/calibrate.rs` | 当前仅做校准后归一化 |
+| 看 LinTx 当前 mixer | `src/control/mixer.rs` | `src/input/calibrate.rs` | 当前仅做校准后归一化 |
 
 ### 5. 逻辑开关、特殊功能、飞行模式
 
@@ -92,7 +92,7 @@
 | --- | --- | --- | --- |
 | 看 EdgeTX 如何抽象 RF/协议输出 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/pulses/pulses.cpp` | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/pulses/` 目录下具体协议文件 | 先看总入口，再看具体协议 |
 | 看 EdgeTX 模型如何持有模块配置 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/datastructs_private.h` | 无 | `moduleData` 是协议输出配置来源 |
-| 看 LinTx 当前实现 | `src/elrs_tx.rs` | `src/usb_gamepad/driver.rs` | 目前没有统一“输出模块抽象” |
+| 看 LinTx 当前实现 | `src/output/elrs/tx.rs` | `src/output/usb_gamepad/driver.rs` | 目前没有统一“输出模块抽象” |
 
 ### 7. 遥测系统
 
@@ -100,7 +100,7 @@
 | --- | --- | --- | --- |
 | 看 EdgeTX 遥测总入口 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/telemetry/telemetry.cpp` | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/telemetry/telemetry_sensors.cpp` | 先理解调度，再理解传感器模型 |
 | 看具体协议解析 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/telemetry/crossfire.cpp` | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/telemetry/frsky*.cpp` 等 | 后续按需要只读某一协议 |
-| 看 LinTx 当前状态 | `src/messages.rs` | `src/system_state_mock.rs` | 当前还没有真实遥测协议栈 |
+| 看 LinTx 当前状态 | `src/messages.rs` | `src/tools/system_state_mock.rs` | 当前还没有真实遥测协议栈 |
 
 ### 8. 模型存储与持久化
 
@@ -108,7 +108,7 @@
 | --- | --- | --- | --- |
 | 看 EdgeTX 的存储总入口 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/storage/storage.h` | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/storage/storage_common.cpp` | 先看接口，再看 dirty/writeback |
 | 看模型列表和模型发现 | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/storage/modelslist.cpp` | `/home/shimmer/LinTx/EdgeTX_ref/radio/src/storage/yaml/` | 按需看 YAML 序列化 |
-| 看 LinTx 当前持久化 | `src/calibrate.rs` | `joystick.toml` | 当前只有校准文件 |
+| 看 LinTx 当前持久化 | `src/input/calibrate.rs` | `joystick.toml` | 当前只有校准文件 |
 
 ### 9. UI 与页面组织
 
