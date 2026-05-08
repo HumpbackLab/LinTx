@@ -8,7 +8,7 @@ use crate::{
 use clap::Parser;
 use crc::{Crc, CRC_8_DVB_S2};
 use rpos::{msg::get_new_tx_of_message, thread_logln};
-use serialport::SerialPort;
+use serialport::{ClearBuffer, SerialPort};
 use std::time::Duration;
 
 const STM32_SYNC_BYTE: u8 = 0x5A;
@@ -20,15 +20,6 @@ const STM32_MAX_FRAME_LEN: usize = 60;
 const STM32_MIN_FRAME_LEN: usize = 2;
 const STM32_MAX_BUFFERED_BYTES: usize = STM32_MAX_FRAME_LEN * 8;
 const STM32_REOPEN_DELAY: Duration = Duration::from_millis(500);
-
-enum Stm32Candidate {
-    NeedMore,
-    Dropped,
-    Payload {
-        frame_len: usize,
-        payload_start: usize,
-    },
-}
 
 #[derive(Parser)]
 #[command(
@@ -67,16 +58,24 @@ impl Stm32FrameParser {
 
     fn next_input(&mut self) -> Option<RcInputRawMsg> {
         loop {
-            let (frame_len, payload_start) = match self.next_candidate() {
-                Stm32Candidate::NeedMore => return None,
-                Stm32Candidate::Dropped => continue,
-                Stm32Candidate::Payload {
-                    frame_len,
-                    payload_start,
-                } => (frame_len, payload_start),
-            };
+            self.discard_until_sync();
 
-            let payload = &self.buffer[payload_start..frame_len];
+            if self.buffer.len() < 2 {
+                return None;
+            }
+
+            let payload_len = self.buffer[1] as usize;
+            if !(STM32_MIN_FRAME_LEN..=STM32_MAX_FRAME_LEN).contains(&payload_len) {
+                self.buffer.drain(..1);
+                continue;
+            }
+
+            let frame_len = 2 + payload_len;
+            if self.buffer.len() < frame_len {
+                return None;
+            }
+
+            let payload = &self.buffer[2..frame_len];
             let data_len = payload.len();
             let received_crc = payload[data_len - 1];
             let computed_crc = self.crc_alg.checksum(&payload[..data_len - 1]);
@@ -93,66 +92,14 @@ impl Stm32FrameParser {
         }
     }
 
-    fn next_candidate(&mut self) -> Stm32Candidate {
-        if self.buffer.is_empty() {
-            return Stm32Candidate::NeedMore;
+    fn discard_until_sync(&mut self) {
+        if let Some(sync_pos) = self.buffer.iter().position(|byte| *byte == STM32_SYNC_BYTE) {
+            if sync_pos > 0 {
+                self.buffer.drain(..sync_pos);
+            }
+        } else {
+            self.buffer.clear();
         }
-
-        if self.buffer[0] == STM32_SYNC_BYTE {
-            if self.buffer.len() < 2 {
-                return Stm32Candidate::NeedMore;
-            }
-            let payload_len = self.buffer[1] as usize;
-            if !(STM32_MIN_FRAME_LEN..=STM32_MAX_FRAME_LEN).contains(&payload_len) {
-                self.buffer.drain(..1);
-                return Stm32Candidate::Dropped;
-            }
-            let frame_len = 2 + payload_len;
-            if self.buffer.len() < frame_len {
-                return Stm32Candidate::NeedMore;
-            }
-            return Stm32Candidate::Payload {
-                frame_len,
-                payload_start: 2,
-            };
-        }
-
-        if matches!(
-            self.buffer[0] as usize,
-            STM32_JOYSTICK_LEGACY_PAYLOAD_LEN | STM32_JOYSTICK_EXTENDED_PAYLOAD_LEN
-        ) {
-            let payload_len = self.buffer[0] as usize;
-            let frame_len = 1 + payload_len;
-            if self.buffer.len() < frame_len {
-                return Stm32Candidate::NeedMore;
-            }
-            return Stm32Candidate::Payload {
-                frame_len,
-                payload_start: 1,
-            };
-        }
-
-        self.discard_until_frame_marker();
-        Stm32Candidate::Dropped
-    }
-
-    fn discard_until_frame_marker(&mut self) {
-        let marker_pos = self.buffer.iter().position(|byte| {
-            *byte == STM32_SYNC_BYTE
-                || matches!(
-                    *byte as usize,
-                    STM32_JOYSTICK_LEGACY_PAYLOAD_LEN | STM32_JOYSTICK_EXTENDED_PAYLOAD_LEN
-                )
-        });
-        match marker_pos {
-            Some(0) => {
-                self.buffer.drain(..1);
-            }
-            Some(pos) => {
-                self.buffer.drain(..pos);
-            }
-            None => self.buffer.clear(),
-        };
     }
 
     fn trim_buffer_tail(&mut self) {
@@ -161,14 +108,11 @@ impl Stm32FrameParser {
         }
 
         let keep_from = self.buffer.len().saturating_sub(STM32_MAX_BUFFERED_BYTES);
-        if let Some(marker_pos) = self.buffer[keep_from..].iter().position(|byte| {
-            *byte == STM32_SYNC_BYTE
-                || matches!(
-                    *byte as usize,
-                    STM32_JOYSTICK_LEGACY_PAYLOAD_LEN | STM32_JOYSTICK_EXTENDED_PAYLOAD_LEN
-                )
-        }) {
-            self.buffer.drain(..keep_from + marker_pos);
+        if let Some(sync_pos) = self.buffer[keep_from..]
+            .iter()
+            .position(|byte| *byte == STM32_SYNC_BYTE)
+        {
+            self.buffer.drain(..keep_from + sync_pos);
         } else {
             self.buffer.clear();
         }
@@ -234,9 +178,13 @@ fn open_stm32_port(
     dev_name: &str,
     baudrate: u32,
 ) -> Result<Box<dyn SerialPort>, serialport::Error> {
-    serialport::new(dev_name, baudrate)
+    let port = serialport::new(dev_name, baudrate)
         .timeout(Duration::from_millis(10))
-        .open()
+        .open()?;
+    if let Err(err) = port.clear(ClearBuffer::Input) {
+        thread_logln!("Failed to clear STM32 serial input buffer: {}", err);
+    }
+    Ok(port)
 }
 
 fn read_stm32_stream(
@@ -408,39 +356,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parser_accepts_bare_extended_frame_without_sync_byte() {
-        let buttons = (1 << 10) | (1 << 14);
-        let frame = build_frame_with_buttons([2048, 2048, 2048, 2048], 0x05, 0x00, buttons);
-        let mut parser = Stm32FrameParser::new();
-
-        parser.push_bytes(&frame[1..]);
-
-        let input = parser.next_input().unwrap();
-        assert_eq!(input.axes, [2048, 2048, 2048, 2048]);
-        assert_eq!(input.switch_3pos, [1, 1, 0, 0]);
-        assert_eq!(input.switch_2pos, [false, false]);
-        assert_eq!(input.buttons, buttons as u32);
-        assert_eq!(parser.next_input(), None);
-    }
-
-    #[test]
-    fn test_parser_accepts_board_observed_bare_frame() {
-        let observed = [
-            0x0e, 0x01, 0x00, 0x08, 0x00, 0x08, 0x00, 0x08, 0x00, 0x08, 0x05, 0x00, 0x00, 0x00,
-            0x70,
-        ];
-        let mut parser = Stm32FrameParser::new();
-
-        parser.push_bytes(&observed);
-
-        let input = parser.next_input().unwrap();
-        assert_eq!(input.axes, [2048, 2048, 2048, 2048]);
-        assert_eq!(input.switch_3pos, [1, 1, 0, 0]);
-        assert_eq!(input.switch_2pos, [false, false]);
-        assert_eq!(input.buttons, 0);
-    }
-
-    #[test]
     fn test_parse_joystick_channels_rejects_non_joystick_payload() {
         let mut frame = build_frame([2088, 1541, 2059, 2061]);
         frame[2] = 0x02;
@@ -466,6 +381,16 @@ mod tests {
             parser.next_input().map(|input| input.axes),
             Some([2088, 1541, 2059, 2061])
         );
+        assert_eq!(parser.next_input(), None);
+    }
+
+    #[test]
+    fn test_parser_ignores_bare_frame_without_sync_byte() {
+        let frame = build_frame_with_buttons([2048, 2048, 2048, 2048], 0x05, 0x00, 1 << 10);
+        let mut parser = Stm32FrameParser::new();
+
+        parser.push_bytes(&frame[1..]);
+
         assert_eq!(parser.next_input(), None);
     }
 

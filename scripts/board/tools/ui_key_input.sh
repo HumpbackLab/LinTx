@@ -2,7 +2,7 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$SCRIPT_DIR/board_common.sh"
+. "$SCRIPT_DIR/../lib/board_common.sh"
 
 cat <<'EOF_INFO'
 Attach terminal key injector.

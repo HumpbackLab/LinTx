@@ -329,6 +329,25 @@ impl ElrsProtocolRuntime {
                         let index = fallback_tx_power_option_index(power);
                         let selected = format!("{}mW", TX_POWER_FALLBACK_LEVELS_MW[index]);
                         (field_id, index, selected)
+                    } else if power >= 100 {
+                        if let Some((param_id, param_options)) = self
+                            .find_max_tx_power_select_param()
+                            .map(|param| (param.id, param.options.clone()))
+                        {
+                            let Some(index) = nearest_option_index(&param_options, power) else {
+                                self.request_refresh();
+                                return ElrsOperationStatus::Unsupported(
+                                    "TX power options unavailable",
+                                );
+                            };
+                            let selected = param_options[index].clone();
+                            (param_id, index, selected)
+                        } else {
+                            self.request_refresh();
+                            return ElrsOperationStatus::Unsupported(
+                                "TX power is read-only on this module (adjust TX max power)",
+                            );
+                        }
                     } else {
                         self.request_refresh();
                         return ElrsOperationStatus::Unsupported(
@@ -470,6 +489,20 @@ impl ElrsProtocolRuntime {
             }
         }
 
+        if let Some(frame) = self.outgoing_queue.pop_front() {
+            if self.bind_command_pending {
+                self.bind_command_pending = false;
+                self.bind_frames_remaining = self.bind_frames_remaining.saturating_sub(1);
+                self.bind_settle_until = Some(now + BIND_SETTLE_INTERVAL);
+                self.last_status = Some("Bind command sent".to_string());
+            }
+            if is_pending_wifi_start_frame(self.pending_command.as_ref(), &frame) {
+                self.last_wifi_command_at = Some(now);
+            }
+            self.last_param_frame_at = Some(now);
+            return Some(frame);
+        }
+
         if let Some(pending) = self.pending_tx_power_write.clone() {
             if now.saturating_duration_since(pending.requested_at) >= TX_POWER_CONFIRM_TIMEOUT {
                 self.pending_tx_power_write = None;
@@ -496,20 +529,6 @@ impl ElrsProtocolRuntime {
                     0,
                 ));
             }
-        }
-
-        if let Some(frame) = self.outgoing_queue.pop_front() {
-            if self.bind_command_pending {
-                self.bind_command_pending = false;
-                self.bind_frames_remaining = self.bind_frames_remaining.saturating_sub(1);
-                self.bind_settle_until = Some(now + BIND_SETTLE_INTERVAL);
-                self.last_status = Some("Bind command sent".to_string());
-            }
-            if is_pending_wifi_start_frame(self.pending_command.as_ref(), &frame) {
-                self.last_wifi_command_at = Some(now);
-            }
-            self.last_param_frame_at = Some(now);
-            return Some(frame);
         }
 
         if let Some(PendingCommand {

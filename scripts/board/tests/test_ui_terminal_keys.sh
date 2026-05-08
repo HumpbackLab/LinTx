@@ -2,7 +2,7 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$SCRIPT_DIR/board_common.sh"
+. "$SCRIPT_DIR/../lib/board_common.sh"
 
 stop_lintx
 start_server
@@ -30,4 +30,4 @@ Use keys in this SSH session:
 Press q to stop.
 EOF_INFO
 
-sh "$SCRIPT_DIR/ui_key_input.sh"
+sh "$SCRIPT_DIR/../tools/ui_key_input.sh"

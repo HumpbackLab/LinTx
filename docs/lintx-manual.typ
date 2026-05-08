@@ -859,34 +859,32 @@ log("Response: " .. (response or "timeout"))
 
 == 部署脚本
 
-板端推荐使用 `scripts/board/` 下的脚本启动各种功能流程。
+板端推荐使用仓库根目录的 `start` 启动完整功能链路；专项验证脚本位于 `scripts/board/tests/`。
 
-=== test_gui_mock.sh
+=== start
 
-启动模拟 GUI 流程（无真实硬件）：
+启动默认完整链路：
 ```bash
-sh ./scripts/board/test_gui_mock.sh
+./start
 ```
 
-=== test_gui_crsf.sh
-
-启动真实 ELRS/CRSF GUI 联调流程：
+无 STM32 输入时，可使用 mock 输入：
 ```bash
-sh ./scripts/board/test_gui_crsf.sh /dev/ttyS3 420000
+./start /dev/ttyS2 115200 mock
 ```
 
 === test_elrs_ui_config.sh
 
 启动完整的输入+混控+RF+UI 流程：
 ```bash
-sh ./scripts/board/test_elrs_ui_config.sh /dev/ttyS2 115200 stm32 /dev/ttyS0 115200
+sh ./scripts/board/tests/test_elrs_ui_config.sh /dev/ttyS2 115200 stm32 /dev/ttyS0 115200
 ```
 
 === test_input_stm32.sh
 
 验证 STM32 输入链：
 ```bash
-sh ./scripts/board/test_input_stm32.sh /dev/ttyS3 115200
+sh ./scripts/board/tests/test_input_stm32.sh /dev/ttyS3 115200
 ```
 
 === stop_lintx.sh

@@ -68,25 +68,22 @@ cargo check --features lua
 LinTx 采用客户端-服务器架构（基于 `rpos` 库）。主程序通常作为服务器后台运行，通过命令行参数启动具体的子模块。
 
 ### 板端启动脚本
-板端推荐使用 `scripts/board/` 下的 `sh` 脚本启动 GUI 和 ELRS 联调流程。
+板端推荐使用仓库根目录的 `start` 启动完整输入、混控、ELRS 和 GUI 链路。专项验证脚本收纳在 `scripts/board/tests/`，工具脚本收纳在 `scripts/board/tools/`。
 
 部署完成后，在板子上执行：
 
 ```bash
 cd /root/lintx
-sh ./scripts/board/test_gui_mock.sh
-sh ./scripts/board/test_gui_crsf.sh /dev/ttyS3 420000
-sh ./scripts/board/test_gui_crsf_debug.sh /dev/ttyS3 420000
-sh ./scripts/board/test_elrs_ui_config.sh /dev/ttyS2 115200 stm32 /dev/ttyS0 115200
-sh ./scripts/board/test_input_mock.sh
-sh ./scripts/board/test_input_stm32.sh /dev/ttyS3 115200
+./start
+./start /dev/ttyS2 115200 mock
+sh ./scripts/board/tests/test_elrs_ui_config.sh /dev/ttyS2 115200 stm32 /dev/ttyS0 115200
+sh ./scripts/board/tests/test_input_mock.sh
+sh ./scripts/board/tests/test_input_stm32.sh /dev/ttyS3 115200
 sh ./scripts/board/stop_lintx.sh
 ```
 
 说明：
-- `test_gui_mock.sh`：启动 `server + elrs_agent(mock) + ui_demo(fb)`。
-- `test_gui_crsf.sh`：启动真实 ELRS/CRSF GUI 联调流程。
-- `test_gui_crsf_debug.sh`：在真实流程上额外打开 `LINTX_ELRS_DEBUG=1`。
+- `start`：默认启动 `server + stm32_serial + rc_button_input + mixer + rf_link_service + ui_demo(fb)`，是板端完整启动入口。
 - `test_elrs_ui_config.sh`：启动 `server + stm32_serial/mock + mixer + rf_link_service + ui_demo`，用于 ELRS 页面参数和 Bind 联调。推荐 `RF UART @ 115200`。
 - `test_input_mock.sh`：启动 `server + mock_joystick + mixer + ui_demo(fb)`，用于输入链验证。
 - `test_input_stm32.sh`：启动 `server + stm32_serial + mixer + ui_demo(fb)`，用于当前 TX 主输入链验证。

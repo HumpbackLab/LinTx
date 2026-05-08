@@ -16,3 +16,11 @@ source_priority = [
     "crsf",
     "mock",
 ]
+
+[elrs]
+rf_output_enabled = false
+wifi_manual_on = false
+bind_mode = false
+tx_power_mw = 250
+tx_max_power_mw = 250
+bind_phrase = "654321"

@@ -49,7 +49,7 @@ sh scripts/board/deploy_to_board.sh
 - 板端存在 `/dev/fb0`
 - 如果要测真实串口输入，确认 `/dev/ttyS*` 存在
 - 如果要测 `joy_dev`，确认 `/dev/input/js*` 存在
-- 默认 UI 参数来自 [scripts/board/board_common.sh](/home/shimmer/LinTx/LinTx_musl/scripts/board/board_common.sh)
+- 默认 UI 参数来自 [scripts/board/lib/board_common.sh](/home/shimmer/LinTx/LinTx_musl/scripts/board/lib/board_common.sh)
 
 ## 建议板级验证方法
 
@@ -62,7 +62,7 @@ sh scripts/board/deploy_to_board.sh
 
 ```bash
 cd /root/lintx
-sh ./scripts/board/test_input_mock.sh
+sh ./scripts/board/tests/test_input_mock.sh
 ```
 
 进入 Control 页面，检查：
@@ -88,7 +88,7 @@ LINTX_FB_ROTATE=270 LINTX_FB_SWAP_RB=1 ./LinTx -- ui_demo --backend fb --fb-devi
 
 ```bash
 cd /root/lintx
-sh ./scripts/board/test_input_stm32.sh /dev/ttyS0 115200
+sh ./scripts/board/tests/test_input_stm32.sh /dev/ttyS0 115200
 ```
 
 或手工执行：
@@ -121,7 +121,7 @@ LINTX_FB_ROTATE=270 LINTX_FB_SWAP_RB=1 ./LinTx -- ui_demo --backend fb --fb-devi
 
 ```bash
 cd /root/lintx
-sh ./scripts/board/test_input_elrs_return.sh /dev/ttyS0 115200 /dev/ttyS3 115200
+sh ./scripts/board/tests/test_input_elrs_return.sh /dev/ttyS0 115200 /dev/ttyS3 115200
 ```
 
 检查：
@@ -268,7 +268,7 @@ LINTX_FB_ROTATE=270 LINTX_FB_SWAP_RB=1 ./LinTx -- ui_demo --backend fb --fb-devi
 - 完成项（可交付闭环）：
   - 串口收发已统一到 `rf_link_service`，并保留 `elrs_tx` 命令兼容入口
   - 输入监视链新增 ELRS 回传反馈显示（`elrs_feedback`）
-  - 新增板级脚本 `scripts/board/test_input_elrs_return.sh`
+  - 新增板级脚本 `scripts/board/tests/test_input_elrs_return.sh`
 - 非目标（本次不做）：
   - 不实现完整 ELRS 参数树读写/目录导航/写入确认
   - 不补齐全部遥测字段语义

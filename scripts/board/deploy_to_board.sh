@@ -32,6 +32,6 @@ tar \
 sshpass -p "$BOARD_PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$BOARD_HOST" \
     "cat > '$BOARD_DIR/LinTx'" < "$TARGET_BIN"
 sshpass -p "$BOARD_PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$BOARD_HOST" \
-    "chmod +x '$BOARD_DIR/LinTx' '$BOARD_DIR'/scripts/board/*.sh"
+    "chmod +x '$BOARD_DIR/LinTx' '$BOARD_DIR/start' '$BOARD_DIR/start.sh' && find '$BOARD_DIR/scripts/board' -type f -name '*.sh' -exec chmod +x {} ';' && find '$BOARD_DIR/scripts/board' -type f -name '*.py' -exec chmod +x {} ';'"
 
 echo "deployed to $BOARD_HOST:$BOARD_DIR"

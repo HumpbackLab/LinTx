@@ -2,7 +2,4 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$SCRIPT_DIR/lib/board_common.sh"
-
-stop_lintx
-show_status
+exec sh "$SCRIPT_DIR/start.sh" "$@"

@@ -35,11 +35,11 @@
 
 | 验证场景 | 涉及接口 | 目的 | 如何运行 | 备注 |
 | --- | --- | --- | --- | --- |
-| Mock 输入链 + GUI | `mock_joystick`, mixer, system_state_mock, `ui_demo --backend fb/sdl` | 确保统一输入帧到 UI 的展示（源、状态、通道值） | `scripts/board/test_input_mock.sh`：启动 server + mock + mixer + UI | 验证 A-01、A-08、A-09 |
+| Mock 输入链 + GUI | `mock_joystick`, mixer, system_state_mock, `ui_demo --backend fb/sdl` | 确保统一输入帧到 UI 的展示（源、状态、通道值） | `scripts/board/tests/test_input_mock.sh`：启动 server + mock + mixer + UI | 验证 A-01、A-08、A-09 |
 | `adc` 真实采样 | `adc` + `ui_demo` | 检查模拟摇杆可见 | `./LinTx --server & ./LinTx -- adc & ./LinTx -- ui_demo --backend fb` | 对应 A-02 |
-| STM32 串口 | `stm32_serial` + mixer + UI | 确认 STM32 回传值在 Control 页面更新 | `scripts/board/test_input_stm32.sh /dev/ttyS0 115200` 或手工链启动 | 对应 A-03；2026-04-01 在 `10.85.35.1` 上实测 `ttyS0` 有效 |
+| STM32 串口 | `stm32_serial` + mixer + UI | 确认 STM32 回传值在 Control 页面更新 | `scripts/board/tests/test_input_stm32.sh /dev/ttyS0 115200` 或手工链启动 | 对应 A-03；2026-04-01 在 `10.85.35.1` 上实测 `ttyS0` 有效 |
 | CRSF 输入 | `crsf_rc_in` | 验证外部 RC 兼容输入 | `./LinTx --server & ./LinTx -- crsf_rc_in /dev/ttyS3 --baudrate 420000 & ./LinTx -- ui_demo --backend fb` | 对应 A-04，兼容 EdgeTX 的 CRSF 收发场景 |
-| ELRS 回传状态 | `rf_link_service` + `mixer` + 主输入源 | 验证同串口收发并行、基础回传状态可见 | `sh ./scripts/board/test_input_elrs_return.sh /dev/ttyS0 115200 /dev/ttyS3 115200` | 对应 A-11~A-14；输入源仍应保持为主输入，不应被回传链覆盖 |
+| ELRS 回传状态 | `rf_link_service` + `mixer` + 主输入源 | 验证同串口收发并行、基础回传状态可见 | `sh ./scripts/board/tests/test_input_elrs_return.sh /dev/ttyS0 115200 /dev/ttyS3 115200` | 对应 A-11~A-14；输入源仍应保持为主输入，不应被回传链覆盖 |
 | joydev 输入 | `joy_dev` | 检查 Linux 手柄/模拟器可见 | `./LinTx -- joy_dev /dev/input/js0` 配合 UI | 对应 A-05 |
 | 错误路径 | `stm32_serial/crsf_rc_in/joy_dev` | 状态从 `Running` 跳 `Error` 并带 detail | 用不存在的设备路径启动 | 对应 A-06、A-10 |
 

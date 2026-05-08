@@ -17,9 +17,9 @@
 
 板端输入验证常用脚本：
 
-- `scripts/board/test_input_mock.sh`
-- `scripts/board/test_input_stm32.sh`
-- `scripts/board/test_input_elrs_return.sh`
+- `scripts/board/tests/test_input_mock.sh`
+- `scripts/board/tests/test_input_stm32.sh`
+- `scripts/board/tests/test_input_elrs_return.sh`
 
 推荐记录格式：
 
