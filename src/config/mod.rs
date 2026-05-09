@@ -1,6 +1,6 @@
 pub mod store;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub const CONFIG_SCHEMA_VERSION: u32 = 1;
 
@@ -28,6 +28,8 @@ pub struct ModelConfig {
     pub name: String,
     #[serde(default)]
     pub input_mapping: InputMapping,
+    #[serde(default)]
+    pub aux_mapping: AuxMapping,
     #[serde(default)]
     pub mixer: MixerConfig,
     #[serde(default)]
@@ -93,6 +95,29 @@ pub struct InputChannel {
     pub index: u8,
     #[serde(default)]
     pub reversed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuxMapping {
+    #[serde(default = "default_aux_channels")]
+    pub channels: Vec<AuxChannelMapping>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuxChannelMapping {
+    pub channel: u8,
+    #[serde(default)]
+    pub source: AuxSource,
+    #[serde(default)]
+    pub inverted: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuxSource {
+    None,
+    Switch3Pos(u8),
+    Switch2Pos(u8),
+    Button(u8),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -251,6 +276,7 @@ impl Default for ModelConfig {
             id: default_model_id(),
             name: default_model_name(),
             input_mapping: InputMapping::default(),
+            aux_mapping: AuxMapping::default(),
             mixer: MixerConfig::default(),
             output: OutputConfig::default(),
             telemetry: TelemetryConfig::default(),
@@ -333,6 +359,93 @@ impl Default for InputMapping {
                 },
             ],
         }
+    }
+}
+
+impl Default for AuxMapping {
+    fn default() -> Self {
+        Self {
+            channels: default_aux_channels(),
+        }
+    }
+}
+
+impl AuxMapping {
+    pub fn normalized_channels(&self) -> Vec<AuxChannelMapping> {
+        let mut channels = default_aux_channels();
+        for mapping in &self.channels {
+            if (5..=16).contains(&mapping.channel) {
+                channels[mapping.channel as usize - 5] = mapping.clone();
+            }
+        }
+        channels
+    }
+}
+
+impl AuxSource {
+    pub fn parse_name(name: &str) -> Option<Self> {
+        let normalized = name.trim().to_ascii_uppercase();
+        if normalized.is_empty() || normalized == "NONE" {
+            return Some(Self::None);
+        }
+
+        match normalized.as_str() {
+            "SA" => Some(Self::Switch3Pos(0)),
+            "SB" => Some(Self::Switch3Pos(1)),
+            "SC" => Some(Self::Switch3Pos(2)),
+            "SD" => Some(Self::Switch3Pos(3)),
+            "S1" => Some(Self::Switch2Pos(0)),
+            "S2" => Some(Self::Switch2Pos(1)),
+            _ => normalized
+                .strip_prefix('B')
+                .and_then(|value| value.parse::<u8>().ok())
+                .filter(|value| *value < 16)
+                .map(Self::Button),
+        }
+    }
+
+    pub fn name(self) -> String {
+        match self {
+            Self::None => "none".to_string(),
+            Self::Switch3Pos(index) => {
+                let name = match index {
+                    0 => "SA",
+                    1 => "SB",
+                    2 => "SC",
+                    3 => "SD",
+                    _ => "none",
+                };
+                name.to_string()
+            }
+            Self::Switch2Pos(index) => format!("S{}", index + 1),
+            Self::Button(index) => format!("B{index}"),
+        }
+    }
+}
+
+impl Default for AuxSource {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl Serialize for AuxSource {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.name())
+    }
+}
+
+impl<'de> Deserialize<'de> for AuxSource {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        AuxSource::parse_name(&value)
+            .ok_or_else(|| serde::de::Error::custom(format!("invalid AUX source '{value}'")))
     }
 }
 
@@ -468,6 +581,71 @@ fn default_volume() -> u8 {
     60
 }
 
+fn default_aux_channels() -> Vec<AuxChannelMapping> {
+    vec![
+        AuxChannelMapping {
+            channel: 5,
+            source: AuxSource::Switch2Pos(0),
+            inverted: false,
+        },
+        AuxChannelMapping {
+            channel: 6,
+            source: AuxSource::Switch3Pos(0),
+            inverted: false,
+        },
+        AuxChannelMapping {
+            channel: 7,
+            source: AuxSource::Switch3Pos(1),
+            inverted: false,
+        },
+        AuxChannelMapping {
+            channel: 8,
+            source: AuxSource::Switch3Pos(2),
+            inverted: false,
+        },
+        AuxChannelMapping {
+            channel: 9,
+            source: AuxSource::Switch3Pos(3),
+            inverted: false,
+        },
+        AuxChannelMapping {
+            channel: 10,
+            source: AuxSource::Switch2Pos(1),
+            inverted: false,
+        },
+        AuxChannelMapping {
+            channel: 11,
+            source: AuxSource::None,
+            inverted: false,
+        },
+        AuxChannelMapping {
+            channel: 12,
+            source: AuxSource::None,
+            inverted: false,
+        },
+        AuxChannelMapping {
+            channel: 13,
+            source: AuxSource::None,
+            inverted: false,
+        },
+        AuxChannelMapping {
+            channel: 14,
+            source: AuxSource::None,
+            inverted: false,
+        },
+        AuxChannelMapping {
+            channel: 15,
+            source: AuxSource::None,
+            inverted: false,
+        },
+        AuxChannelMapping {
+            channel: 16,
+            source: AuxSource::None,
+            inverted: false,
+        },
+    ]
+}
+
 fn default_weight() -> i16 {
     100
 }
@@ -587,5 +765,62 @@ role = "elevator"
 
         assert_eq!(config.mixer.outputs.len(), 4);
         assert_eq!(config.output.channel_order.len(), 12);
+    }
+
+    #[test]
+    fn test_default_aux_mapping_preserves_switch_channel_layout() {
+        let model = ModelConfig::default();
+        let channels = model.aux_mapping.normalized_channels();
+
+        assert_eq!(channels.len(), 12);
+        assert_eq!(channels[0].channel, 5);
+        assert_eq!(channels[0].source, AuxSource::Switch2Pos(0));
+        assert_eq!(channels[1].channel, 6);
+        assert_eq!(channels[1].source, AuxSource::Switch3Pos(0));
+        assert_eq!(channels[4].channel, 9);
+        assert_eq!(channels[4].source, AuxSource::Switch3Pos(3));
+        assert_eq!(channels[5].channel, 10);
+        assert_eq!(channels[5].source, AuxSource::Switch2Pos(1));
+        assert!(channels[6..]
+            .iter()
+            .all(|mapping| mapping.source == AuxSource::None));
+    }
+
+    #[test]
+    fn test_aux_source_names_parse_supported_inputs() {
+        assert_eq!(AuxSource::parse_name("SA"), Some(AuxSource::Switch3Pos(0)));
+        assert_eq!(AuxSource::parse_name("sd"), Some(AuxSource::Switch3Pos(3)));
+        assert_eq!(AuxSource::parse_name("S1"), Some(AuxSource::Switch2Pos(0)));
+        assert_eq!(AuxSource::parse_name("s2"), Some(AuxSource::Switch2Pos(1)));
+        assert_eq!(AuxSource::parse_name("B0"), Some(AuxSource::Button(0)));
+        assert_eq!(AuxSource::parse_name("b15"), Some(AuxSource::Button(15)));
+        assert_eq!(AuxSource::parse_name("none"), Some(AuxSource::None));
+        assert_eq!(AuxSource::parse_name(""), Some(AuxSource::None));
+        assert_eq!(AuxSource::parse_name("B16"), None);
+        assert_eq!(AuxSource::parse_name("SE"), None);
+    }
+
+    #[test]
+    fn test_aux_mapping_toml_uses_last_duplicate_channel() {
+        let toml = r#"
+id = "dup"
+name = "Duplicate"
+
+[[aux_mapping.channels]]
+channel = 5
+source = "SA"
+
+[[aux_mapping.channels]]
+channel = 5
+source = "B3"
+inverted = true
+"#;
+
+        let model: ModelConfig = toml::from_str(toml).unwrap();
+        let channels = model.aux_mapping.normalized_channels();
+
+        assert_eq!(channels[0].channel, 5);
+        assert_eq!(channels[0].source, AuxSource::Button(3));
+        assert!(channels[0].inverted);
     }
 }

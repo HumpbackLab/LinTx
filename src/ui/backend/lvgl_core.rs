@@ -1,7 +1,10 @@
 use crate::{
     messages::{UiFeedbackMotion, UiFeedbackSeverity, UiFeedbackSlot, UiFeedbackTarget},
     ui::{
-        apps::models::visible_model_rows,
+        apps::{
+            models::visible_model_rows,
+            trainer::{focused_aux_possible_outputs, visible_aux_rows},
+        },
         catalog::{app_at, app_spec, page, PAGE_SPECS},
         feedback::UiFeedbackSnapshot,
         keyboard::{KEYBOARD_MAX_COLS, KEYBOARD_ROWS},
@@ -467,37 +470,25 @@ impl LvglUiCore {
                     list_lines: [
                         format!("Detail: {}", frame.input_status.detail),
                         format!(
-                            "ELRS FB: {} S:{} B:{}",
-                            if frame.elrs_feedback.connected {
-                                "on"
-                            } else {
-                                "off"
-                            },
-                            frame
-                                .elrs_feedback
-                                .signal_strength_percent
-                                .map(|v| format!("{}%", v))
-                                .unwrap_or_else(|| "--".to_string()),
-                            frame
-                                .elrs_feedback
-                                .aircraft_battery_percent
-                                .map(|v| format!("{}%", v))
-                                .unwrap_or_else(|| "--".to_string())
-                        ),
-                        format!(
-                            "CH1-4: {}/{}/{}/{}",
+                            "Raw CH1-4: {}/{}/{}/{}",
                             frame.input_frame.channel_value(0),
                             frame.input_frame.channel_value(1),
                             frame.input_frame.channel_value(2),
                             frame.input_frame.channel_value(3),
                         ),
                         format!(
-                            "Count:{} CH5-8:{}/{}/{}/{}",
-                            frame.input_frame.channels.len(),
-                            frame.input_frame.channel_value(4),
-                            frame.input_frame.channel_value(5),
-                            frame.input_frame.channel_value(6),
-                            frame.input_frame.channel_value(7),
+                            "Mix CH5-8: {}/{}/{}/{}",
+                            frame.mixer_out.channels[4],
+                            frame.mixer_out.channels[5],
+                            frame.mixer_out.channels[6],
+                            frame.mixer_out.channels[7],
+                        ),
+                        format!(
+                            "Mix CH9-12: {}/{}/{}/{}",
+                            frame.mixer_out.channels[8],
+                            frame.mixer_out.channels[9],
+                            frame.mixer_out.channels[10],
+                            frame.mixer_out.channels[11],
                         ),
                     ],
                     list_row_ids: [None, None, None, None],
@@ -753,6 +744,53 @@ impl LvglUiCore {
                 hint: "ENTER/LEFT/RIGHT: Toggle ON/OFF   Swipe right: Back".to_string(),
                 feedback: frame.interaction_feedback.clone(),
             },
+            AppId::Trainer => {
+                let rows = visible_aux_rows(frame);
+                let mut list_lines: Vec<String> = rows
+                    .iter()
+                    .map(|row| {
+                        format!(
+                            "{} CH{}: [{}] {}",
+                            if row.is_focused { ">" } else { " " },
+                            row.channel,
+                            row.source.to_ascii_uppercase(),
+                            row.value,
+                        )
+                    })
+                    .collect();
+                while list_lines.len() < 4 {
+                    list_lines.push(String::new());
+                }
+                AppTemplateData {
+                    accent: spec.accent,
+                    badge: "AUX MAP".to_string(),
+                    title: "AUX Channel Map".to_string(),
+                    subtitle: "Assign switches and buttons to CH5-CH16".to_string(),
+                    metric_titles: ["Focus".to_string(), "Output".to_string()],
+                    metric_values: [
+                        format!(
+                            "CH{}",
+                            rows.iter()
+                                .find(|row| row.is_focused)
+                                .or_else(|| rows.first())
+                                .map(|row| row.channel)
+                                .unwrap_or(5)
+                        ),
+                        focused_aux_possible_outputs(frame).to_string(),
+                    ],
+                    metric_progress: [0, 0],
+                    list_title: "Mappings".to_string(),
+                    list_lines: [
+                        list_lines[0].clone(),
+                        list_lines[1].clone(),
+                        list_lines[2].clone(),
+                        list_lines[3].clone(),
+                    ],
+                    list_row_ids: [None, None, None, None],
+                    hint: "UP/DOWN: Focus   ENTER: Edit source   Swipe right: Back".to_string(),
+                    feedback: frame.interaction_feedback.clone(),
+                }
+            }
             _ => {
                 let spec = app_spec(app);
                 let badge = spec.title.to_string();
@@ -2188,7 +2226,20 @@ impl LvglUiCore {
                 if let Some(colon_idx) = text.find(':') {
                     let key = text[..colon_idx].trim();
                     let val = text[colon_idx + 1..].trim();
-                    Self::set_label_text(ui.app_list_row_keys[i], key);
+                    let two_col_width = ((self.width as i32 - 60) / 2).max(1);
+                    let (key, mid) = if let Some(pipe_idx) = key.find('|') {
+                        (key[..pipe_idx].trim(), Some(key[pipe_idx + 1..].trim()))
+                    } else {
+                        (key, None)
+                    };
+                    if let Some(mid) = mid {
+                        Self::set_label_text(
+                            ui.app_list_row_keys[i],
+                            &format!("{}   {}", key, mid),
+                        );
+                    } else {
+                        Self::set_label_text(ui.app_list_row_keys[i], key);
+                    }
                     Self::set_label_text(ui.app_list_row_vals[i], val);
                     unsafe {
                         lvgl_sys::lv_obj_set_style_text_color(
@@ -2205,12 +2256,49 @@ impl LvglUiCore {
                             ui.app_list_row_vals[i],
                             lvgl_sys::LV_OBJ_FLAG_HIDDEN,
                         );
-                        lvgl_sys::lv_obj_align(
-                            ui.app_list_row_keys[i],
-                            lvgl_sys::LV_ALIGN_LEFT_MID as u8,
-                            Self::to_coord(12),
-                            0,
-                        );
+                        if mid.is_some() {
+                            lvgl_sys::lv_obj_set_width(
+                                ui.app_list_row_keys[i],
+                                Self::to_coord((self.width as i32 - 150).max(80)),
+                            );
+                            lvgl_sys::lv_obj_set_width(
+                                ui.app_list_row_vals[i],
+                                Self::to_coord(110),
+                            );
+                            lvgl_sys::lv_obj_align(
+                                ui.app_list_row_keys[i],
+                                lvgl_sys::LV_ALIGN_LEFT_MID as u8,
+                                Self::to_coord(12),
+                                0,
+                            );
+                            lvgl_sys::lv_obj_align(
+                                ui.app_list_row_vals[i],
+                                lvgl_sys::LV_ALIGN_RIGHT_MID as u8,
+                                Self::to_coord(-12),
+                                0,
+                            );
+                        } else {
+                            lvgl_sys::lv_obj_set_width(
+                                ui.app_list_row_keys[i],
+                                Self::to_coord(two_col_width),
+                            );
+                            lvgl_sys::lv_obj_set_width(
+                                ui.app_list_row_vals[i],
+                                Self::to_coord(two_col_width),
+                            );
+                            lvgl_sys::lv_obj_align(
+                                ui.app_list_row_keys[i],
+                                lvgl_sys::LV_ALIGN_LEFT_MID as u8,
+                                Self::to_coord(12),
+                                0,
+                            );
+                            lvgl_sys::lv_obj_align(
+                                ui.app_list_row_vals[i],
+                                lvgl_sys::LV_ALIGN_RIGHT_MID as u8,
+                                Self::to_coord(-12),
+                                0,
+                            );
+                        }
                     }
                 } else {
                     Self::set_label_text(ui.app_list_row_keys[i], text);

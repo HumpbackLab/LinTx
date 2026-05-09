@@ -1,6 +1,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyboardField {
     BindPhrase,
+    AuxSource { channel: u8 },
 }
 
 pub const KEYBOARD_ROWS: usize = 4;
@@ -80,6 +81,23 @@ impl KeyboardOverlay {
             focus: KeyboardFocus::Key { row: 0, col: 0 },
             invalid: false,
             max_len: 32,
+        }
+    }
+
+    pub fn aux_source(channel: u8, initial: impl Into<String>) -> Self {
+        let buffer = initial.into();
+        let cursor = buffer.len();
+        Self {
+            field: KeyboardField::AuxSource { channel },
+            label: format!("CH{channel} Source"),
+            buffer,
+            cursor,
+            mode: KeyboardMode::Upper,
+            selected_row: 0,
+            selected_col: 0,
+            focus: KeyboardFocus::Key { row: 0, col: 0 },
+            invalid: false,
+            max_len: 6,
         }
     }
 

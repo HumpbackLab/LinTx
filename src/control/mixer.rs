@@ -7,11 +7,11 @@ use std::{
 use rpos::thread_logln;
 
 use crate::{
+    config::{store, AuxSource, ControlRole, ModelConfig, OutputLimits},
     input::calibrate::{
         CalibrationData,
         JoystickChannel::{self, *},
     },
-    config::{store, ControlRole, ModelConfig, OutputLimits},
     messages::{ActiveModelMsg, InputFrameMsg, RcInputRawMsg},
     CALIBRATE_FILENAME,
 };
@@ -57,9 +57,18 @@ fn rc_input_from_axes(axes: [i16; 4]) -> RcInputRawMsg {
     }
 }
 
+#[cfg(test)]
 fn build_default_mixer_out(
     primary_channels: [u16; 4],
     rc_input: Option<&RcInputRawMsg>,
+) -> MixerOutMsg {
+    build_model_mixer_out(primary_channels, rc_input, &ModelConfig::default())
+}
+
+fn build_model_mixer_out(
+    primary_channels: [u16; 4],
+    rc_input: Option<&RcInputRawMsg>,
+    model: &ModelConfig,
 ) -> MixerOutMsg {
     let mut channels = [0u16; 16];
     channels[0] = primary_channels[0];
@@ -68,12 +77,10 @@ fn build_default_mixer_out(
     channels[3] = primary_channels[3];
 
     if let Some(input) = rc_input.filter(|input| input.switches_present) {
-        channels[4] = two_pos_to_mixer(input.switch_2pos[0]);
-        channels[5] = three_pos_to_mixer(input.switch_3pos[0]);
-        channels[6] = three_pos_to_mixer(input.switch_3pos[1]);
-        channels[7] = three_pos_to_mixer(input.switch_3pos[2]);
-        channels[8] = three_pos_to_mixer(input.switch_3pos[3]);
-        channels[9] = two_pos_to_mixer(input.switch_2pos[1]);
+        for mapping in model.aux_mapping.normalized_channels() {
+            let index = mapping.channel as usize - 1;
+            channels[index] = aux_source_to_mixer(mapping.source, mapping.inverted, input);
+        }
     }
 
     if channels[2] > THROTTLE_ARM_MAX {
@@ -81,6 +88,34 @@ fn build_default_mixer_out(
     }
 
     MixerOutMsg { channels }
+}
+
+fn aux_source_to_mixer(source: AuxSource, inverted: bool, input: &RcInputRawMsg) -> u16 {
+    let value = match source {
+        AuxSource::None => 0,
+        AuxSource::Switch3Pos(index) => input
+            .switch_3pos
+            .get(index as usize)
+            .copied()
+            .map(three_pos_to_mixer)
+            .unwrap_or_default(),
+        AuxSource::Switch2Pos(index) => input
+            .switch_2pos
+            .get(index as usize)
+            .copied()
+            .map(two_pos_to_mixer)
+            .unwrap_or_default(),
+        AuxSource::Button(index) => {
+            let pressed = input.buttons & (1u32 << index) != 0;
+            two_pos_to_mixer(pressed)
+        }
+    };
+
+    if inverted {
+        10000 - value
+    } else {
+        value
+    }
 }
 
 fn cal_mixout(channel: JoystickChannel, raw: &InputFrameMsg, cal_data: &CalibrationData) -> u16 {
@@ -202,9 +237,10 @@ fn mixer_main(_argc: u32, _argv: *const &str) {
             &current_model,
             ControlRole::Elevator,
         );
-        let mut mixer_out = build_default_mixer_out(
+        let mut mixer_out = build_model_mixer_out(
             [aileron, elevator, thrust, direction],
             latest_rc_input.as_ref(),
+            &current_model,
         );
         mixer_out.channels[4] =
             apply_output_profile(mixer_out.channels[4], &current_model, ControlRole::Arm);
@@ -239,7 +275,10 @@ fn register() {
 
 #[cfg(test)]
 mod tests {
-    use crate::input::calibrate::ChannelInfo;
+    use crate::{
+        config::{AuxChannelMapping, AuxMapping, AuxSource},
+        input::calibrate::ChannelInfo,
+    };
 
     use super::*;
     use rand::prelude::*;
@@ -432,5 +471,51 @@ mod tests {
         assert_eq!(output.channels[8], 5000);
         assert_eq!(output.channels[9], 10000);
         assert_eq!(output.channels[10..], [0; 6]);
+    }
+
+    #[test]
+    fn test_configured_aux_mapping_can_reuse_source_across_channels() {
+        let mut input = rc_input_from_axes([0, 0, 0, 0]);
+        input.switches_present = true;
+        input.switch_3pos[0] = 2;
+        let mut model = ModelConfig::default();
+        model.aux_mapping = AuxMapping {
+            channels: vec![
+                AuxChannelMapping {
+                    channel: 5,
+                    source: AuxSource::Switch3Pos(0),
+                    inverted: false,
+                },
+                AuxChannelMapping {
+                    channel: 16,
+                    source: AuxSource::Switch3Pos(0),
+                    inverted: false,
+                },
+            ],
+        };
+
+        let output = build_model_mixer_out([5000, 5000, 0, 5000], Some(&input), &model);
+
+        assert_eq!(output.channels[4], 10000);
+        assert_eq!(output.channels[15], 10000);
+    }
+
+    #[test]
+    fn test_configured_aux_mapping_supports_inverted_buttons() {
+        let mut input = rc_input_from_axes([0, 0, 0, 0]);
+        input.switches_present = true;
+        input.buttons = 1 << 3;
+        let mut model = ModelConfig::default();
+        model.aux_mapping = AuxMapping {
+            channels: vec![AuxChannelMapping {
+                channel: 12,
+                source: AuxSource::Button(3),
+                inverted: true,
+            }],
+        };
+
+        let output = build_model_mixer_out([5000, 5000, 0, 5000], Some(&input), &model);
+
+        assert_eq!(output.channels[11], 0);
     }
 }

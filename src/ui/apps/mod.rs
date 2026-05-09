@@ -17,7 +17,7 @@ mod control;
 pub(crate) mod models;
 mod scripts;
 mod system;
-mod trainer;
+pub(crate) mod trainer;
 mod usb_gamepad;
 
 #[derive(Debug, Clone, Copy)]
