@@ -8,6 +8,8 @@ pub enum UiInputEvent {
     Back,
     PagePrev,
     PageNext,
+    KeyboardTap { row: usize, col: usize },
+    KeyboardSubmit,
     Quit,
 }
 

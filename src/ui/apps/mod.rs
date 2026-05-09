@@ -5,7 +5,7 @@ use crate::{
         ActiveModelMsg, ElrsCommandMsg, SystemConfigMsg, UiInteractionFeedback,
         UsbGamepadCommandMsg,
     },
-    ui::{input::UiInputEvent, model::UiFrame},
+    ui::{input::UiInputEvent, keyboard::KeyboardField, model::UiFrame},
 };
 
 use super::model::AppId;
@@ -50,6 +50,16 @@ pub trait UiAppModule: Sync {
     fn render_terminal_detail(&self, frame: &UiFrame) -> String;
 
     fn intercept_back(&self, _frame: &UiFrame) -> bool {
+        false
+    }
+
+    fn on_keyboard_submit(
+        &self,
+        _frame: &mut UiFrame,
+        _field: KeyboardField,
+        _value: &str,
+        _ctx: &UiAppContext<'_>,
+    ) -> bool {
         false
     }
 }
@@ -126,6 +136,16 @@ pub fn app_at(page_idx: usize, row: usize, col: usize) -> Option<AppId> {
 
 pub fn handle_event(app: AppId, frame: &mut UiFrame, event: UiInputEvent, ctx: &UiAppContext<'_>) {
     module_of(app).on_event(frame, event, ctx);
+}
+
+pub fn handle_keyboard_submit(
+    app: AppId,
+    frame: &mut UiFrame,
+    field: KeyboardField,
+    value: &str,
+    ctx: &UiAppContext<'_>,
+) -> bool {
+    module_of(app).on_keyboard_submit(frame, field, value, ctx)
 }
 
 pub fn should_intercept_back(app: AppId, frame: &UiFrame) -> bool {

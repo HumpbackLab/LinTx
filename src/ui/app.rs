@@ -21,6 +21,7 @@ use super::{
     backend::LvglBackend,
     catalog::{app_at, page, PAGE_SPECS},
     input::UiInputEvent,
+    keyboard::{KeyboardAction, KeyboardResult},
     model::{AppId, UiDebugStats, UiFrame, UiModelEntry, UiPage},
 };
 
@@ -351,6 +352,17 @@ impl UiApp {
         ui_feedback_tx: &Sender<UiInteractionFeedback>,
         usb_gamepad_cmd_tx: &Sender<UsbGamepadCommandMsg>,
     ) -> bool {
+        if self.frame.keyboard.is_some() {
+            return self.apply_keyboard_event(
+                event,
+                config_tx,
+                active_model_tx,
+                elrs_cmd_tx,
+                ui_feedback_tx,
+                usb_gamepad_cmd_tx,
+            );
+        }
+
         match event {
             UiInputEvent::Quit => return false,
             UiInputEvent::Back => {
@@ -452,7 +464,80 @@ impl UiApp {
                     self.normalize_selection();
                 }
             }
+            UiInputEvent::KeyboardTap { .. } | UiInputEvent::KeyboardSubmit => {}
         }
+        true
+    }
+
+    fn apply_keyboard_event(
+        &mut self,
+        event: UiInputEvent,
+        config_tx: &Sender<SystemConfigMsg>,
+        active_model_tx: &Sender<ActiveModelMsg>,
+        elrs_cmd_tx: &Sender<ElrsCommandMsg>,
+        ui_feedback_tx: &Sender<UiInteractionFeedback>,
+        usb_gamepad_cmd_tx: &Sender<UsbGamepadCommandMsg>,
+    ) -> bool {
+        let result = {
+            let keyboard = self.frame.keyboard.as_mut().expect("keyboard checked");
+            match event {
+                UiInputEvent::Quit => return false,
+                UiInputEvent::Back | UiInputEvent::PagePrev => {
+                    keyboard.activate(KeyboardAction::Cancel)
+                }
+                UiInputEvent::Open => keyboard.activate_selected(),
+                UiInputEvent::Left => {
+                    keyboard.move_left();
+                    KeyboardResult::None
+                }
+                UiInputEvent::Right => {
+                    keyboard.move_right();
+                    KeyboardResult::None
+                }
+                UiInputEvent::Up => {
+                    keyboard.move_up();
+                    KeyboardResult::None
+                }
+                UiInputEvent::Down => {
+                    keyboard.move_down();
+                    KeyboardResult::None
+                }
+                UiInputEvent::PageNext => KeyboardResult::None,
+                UiInputEvent::KeyboardTap { row, col } => {
+                    keyboard.select(row, col);
+                    keyboard.activate_selected()
+                }
+                UiInputEvent::KeyboardSubmit => keyboard.activate(KeyboardAction::Submit),
+            }
+        };
+
+        match result {
+            KeyboardResult::None => {}
+            KeyboardResult::Cancelled => {
+                self.frame.keyboard = None;
+            }
+            KeyboardResult::Submitted { field, value } => {
+                let ctx = UiAppContext {
+                    config_tx,
+                    active_model_tx,
+                    elrs_cmd_tx,
+                    ui_feedback_tx,
+                    usb_gamepad_cmd_tx,
+                };
+                let accepted = match self.frame.page {
+                    UiPage::App(app) => {
+                        apps::handle_keyboard_submit(app, &mut self.frame, field, &value, &ctx)
+                    }
+                    UiPage::Launcher => false,
+                };
+                if accepted {
+                    self.frame.keyboard = None;
+                } else if let Some(keyboard) = self.frame.keyboard.as_mut() {
+                    keyboard.mark_invalid();
+                }
+            }
+        }
+
         true
     }
 

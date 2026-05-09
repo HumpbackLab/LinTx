@@ -5,6 +5,7 @@ use crate::{
     },
     mixer::MixerOutMsg,
     ui::feedback::UiFeedbackSnapshot,
+    ui::keyboard::{KeyboardField, KeyboardOverlay},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +61,8 @@ pub struct UiFrame {
     pub elrs: ElrsStateMsg,
     pub usb_gamepad: UsbGamepadStateMsg,
     pub debug: UiDebugStats,
+    pub keyboard: Option<KeyboardOverlay>,
+    pub keyboard_armed_field: Option<KeyboardField>,
 }
 
 impl Default for UiFrame {
@@ -84,6 +87,8 @@ impl Default for UiFrame {
             elrs: ElrsStateMsg::default(),
             usb_gamepad: UsbGamepadStateMsg::default(),
             debug: UiDebugStats::default(),
+            keyboard: None,
+            keyboard_armed_field: None,
         }
     }
 }

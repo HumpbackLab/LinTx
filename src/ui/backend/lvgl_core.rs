@@ -4,6 +4,7 @@ use crate::{
         apps::models::visible_model_rows,
         catalog::{app_at, app_spec, page, PAGE_SPECS},
         feedback::UiFeedbackSnapshot,
+        keyboard::{KEYBOARD_MAX_COLS, KEYBOARD_ROWS},
         model::{AppId, UiFrame, UiPage},
     },
 };
@@ -49,6 +50,14 @@ pub(super) struct LvglUiObjects {
     pub(super) snapshot_layer: *mut lvgl_sys::lv_obj_t,
     pub(super) snapshot_img_primary: *mut lvgl_sys::lv_obj_t,
     pub(super) snapshot_img_secondary: *mut lvgl_sys::lv_obj_t,
+    pub(super) keyboard_layer: *mut lvgl_sys::lv_obj_t,
+    pub(super) keyboard_back_button: *mut lvgl_sys::lv_obj_t,
+    pub(super) keyboard_ok_button: *mut lvgl_sys::lv_obj_t,
+    pub(super) keyboard_title_label: *mut lvgl_sys::lv_obj_t,
+    pub(super) keyboard_input_box: *mut lvgl_sys::lv_obj_t,
+    pub(super) keyboard_input_label: *mut lvgl_sys::lv_obj_t,
+    pub(super) keyboard_key_buttons: [[*mut lvgl_sys::lv_obj_t; KEYBOARD_MAX_COLS]; KEYBOARD_ROWS],
+    pub(super) keyboard_key_labels: [[*mut lvgl_sys::lv_obj_t; KEYBOARD_MAX_COLS]; KEYBOARD_ROWS],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1634,6 +1643,199 @@ impl LvglUiCore {
                 Self::to_coord(TOP_BAR_HEIGHT),
             );
 
+            let keyboard_layer = lvgl_sys::lv_obj_create(root);
+            lvgl_sys::lv_obj_set_pos(keyboard_layer, Self::to_coord(0), Self::to_coord(0));
+            lvgl_sys::lv_obj_set_size(
+                keyboard_layer,
+                Self::to_coord(width),
+                Self::to_coord(height),
+            );
+            lvgl_sys::lv_obj_set_style_bg_color(
+                keyboard_layer,
+                lvgl_sys::_LV_COLOR_MAKE(244, 246, 250),
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_bg_opa(keyboard_layer, 255, 0);
+            lvgl_sys::lv_obj_set_style_border_width(keyboard_layer, 0, 0);
+            lvgl_sys::lv_obj_set_style_radius(keyboard_layer, 0, 0);
+            lvgl_sys::lv_obj_set_style_pad_top(keyboard_layer, 0, 0);
+            lvgl_sys::lv_obj_set_style_pad_bottom(keyboard_layer, 0, 0);
+            lvgl_sys::lv_obj_set_style_pad_left(keyboard_layer, 0, 0);
+            lvgl_sys::lv_obj_set_style_pad_right(keyboard_layer, 0, 0);
+            lvgl_sys::lv_obj_clear_flag(keyboard_layer, lvgl_sys::LV_OBJ_FLAG_SCROLLABLE);
+            lvgl_sys::lv_obj_add_flag(keyboard_layer, lvgl_sys::LV_OBJ_FLAG_HIDDEN);
+
+            let top_h = height / 3;
+            let keyboard_back_button = lvgl_sys::lv_obj_create(keyboard_layer);
+            lvgl_sys::lv_obj_set_pos(keyboard_back_button, Self::to_coord(14), Self::to_coord(38));
+            lvgl_sys::lv_obj_set_size(
+                keyboard_back_button,
+                Self::to_coord(108),
+                Self::to_coord(82),
+            );
+            lvgl_sys::lv_obj_set_style_radius(keyboard_back_button, 8, 0);
+            lvgl_sys::lv_obj_set_style_bg_color(
+                keyboard_back_button,
+                lvgl_sys::_LV_COLOR_MAKE(255, 255, 255),
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_bg_opa(keyboard_back_button, 255, 0);
+            lvgl_sys::lv_obj_set_style_border_width(keyboard_back_button, 2, 0);
+            lvgl_sys::lv_obj_set_style_border_color(
+                keyboard_back_button,
+                lvgl_sys::_LV_COLOR_MAKE(199, 208, 223),
+                0,
+            );
+            lvgl_sys::lv_obj_clear_flag(keyboard_back_button, lvgl_sys::LV_OBJ_FLAG_SCROLLABLE);
+            let back_label = lvgl_sys::lv_label_create(keyboard_back_button);
+            Self::set_label_text(back_label, "<");
+            lvgl_sys::lv_obj_set_style_text_font(
+                back_label,
+                &lvgl_sys::lv_font_montserrat_48 as *const _ as *const lvgl_sys::lv_font_t,
+                0,
+            );
+            lvgl_sys::lv_obj_align(back_label, lvgl_sys::LV_ALIGN_CENTER as u8, 0, 0);
+
+            let keyboard_ok_button = lvgl_sys::lv_obj_create(keyboard_layer);
+            lvgl_sys::lv_obj_set_pos(
+                keyboard_ok_button,
+                Self::to_coord(width - 136),
+                Self::to_coord(38),
+            );
+            lvgl_sys::lv_obj_set_size(keyboard_ok_button, Self::to_coord(122), Self::to_coord(82));
+            lvgl_sys::lv_obj_set_style_radius(keyboard_ok_button, 8, 0);
+            lvgl_sys::lv_obj_set_style_bg_color(
+                keyboard_ok_button,
+                lvgl_sys::_LV_COLOR_MAKE(37, 99, 235),
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_bg_opa(keyboard_ok_button, 255, 0);
+            lvgl_sys::lv_obj_set_style_border_width(keyboard_ok_button, 0, 0);
+            lvgl_sys::lv_obj_clear_flag(keyboard_ok_button, lvgl_sys::LV_OBJ_FLAG_SCROLLABLE);
+            let ok_label = lvgl_sys::lv_label_create(keyboard_ok_button);
+            Self::set_label_text(ok_label, "OK");
+            lvgl_sys::lv_obj_set_style_text_color(
+                ok_label,
+                lvgl_sys::_LV_COLOR_MAKE(255, 255, 255),
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_text_font(
+                ok_label,
+                &lvgl_sys::lv_font_montserrat_48 as *const _ as *const lvgl_sys::lv_font_t,
+                0,
+            );
+            lvgl_sys::lv_obj_align(ok_label, lvgl_sys::LV_ALIGN_CENTER as u8, 0, 0);
+
+            let keyboard_title_label = lvgl_sys::lv_label_create(keyboard_layer);
+            lvgl_sys::lv_obj_set_pos(
+                keyboard_title_label,
+                Self::to_coord(136),
+                Self::to_coord(14),
+            );
+            lvgl_sys::lv_obj_set_style_text_color(
+                keyboard_title_label,
+                lvgl_sys::_LV_COLOR_MAKE(41, 50, 65),
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_text_font(
+                keyboard_title_label,
+                &lvgl_sys::lv_font_montserrat_20 as *const _ as *const lvgl_sys::lv_font_t,
+                0,
+            );
+
+            let keyboard_input_box = lvgl_sys::lv_obj_create(keyboard_layer);
+            lvgl_sys::lv_obj_set_pos(keyboard_input_box, Self::to_coord(136), Self::to_coord(48));
+            lvgl_sys::lv_obj_set_size(
+                keyboard_input_box,
+                Self::to_coord(width - 286),
+                Self::to_coord(86),
+            );
+            lvgl_sys::lv_obj_set_style_radius(keyboard_input_box, 8, 0);
+            lvgl_sys::lv_obj_set_style_bg_color(
+                keyboard_input_box,
+                lvgl_sys::_LV_COLOR_MAKE(255, 255, 255),
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_bg_opa(keyboard_input_box, 255, 0);
+            lvgl_sys::lv_obj_set_style_border_width(keyboard_input_box, 3, 0);
+            lvgl_sys::lv_obj_set_style_border_color(
+                keyboard_input_box,
+                lvgl_sys::_LV_COLOR_MAKE(214, 220, 232),
+                0,
+            );
+            lvgl_sys::lv_obj_clear_flag(keyboard_input_box, lvgl_sys::LV_OBJ_FLAG_SCROLLABLE);
+
+            let keyboard_input_label = lvgl_sys::lv_label_create(keyboard_input_box);
+            lvgl_sys::lv_obj_set_style_text_color(
+                keyboard_input_label,
+                lvgl_sys::_LV_COLOR_MAKE(32, 36, 44),
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_text_font(
+                keyboard_input_label,
+                &lvgl_sys::lv_font_montserrat_48 as *const _ as *const lvgl_sys::lv_font_t,
+                0,
+            );
+            lvgl_sys::lv_label_set_long_mode(
+                keyboard_input_label,
+                lvgl_sys::LV_LABEL_LONG_CLIP as lvgl_sys::lv_label_long_mode_t,
+            );
+            lvgl_sys::lv_obj_set_width(keyboard_input_label, Self::to_coord(width - 320));
+            lvgl_sys::lv_obj_align(
+                keyboard_input_label,
+                lvgl_sys::LV_ALIGN_LEFT_MID as u8,
+                Self::to_coord(18),
+                0,
+            );
+
+            let mut keyboard_key_buttons =
+                [[std::ptr::null_mut(); KEYBOARD_MAX_COLS]; KEYBOARD_ROWS];
+            let mut keyboard_key_labels =
+                [[std::ptr::null_mut(); KEYBOARD_MAX_COLS]; KEYBOARD_ROWS];
+            let key_area_top = top_h + 10;
+            let key_area_h = height - key_area_top - 14;
+            let key_gap = 7;
+            let key_h = (key_area_h - key_gap * 3) / 4;
+            for row in 0..KEYBOARD_ROWS {
+                for col in 0..KEYBOARD_MAX_COLS {
+                    let btn = lvgl_sys::lv_obj_create(keyboard_layer);
+                    let key_w = (width - 28 - key_gap * (KEYBOARD_MAX_COLS as i32 - 1))
+                        / KEYBOARD_MAX_COLS as i32;
+                    let x = 14 + col as i32 * (key_w + key_gap);
+                    let y = key_area_top + row as i32 * (key_h + key_gap);
+                    lvgl_sys::lv_obj_set_pos(btn, Self::to_coord(x), Self::to_coord(y));
+                    lvgl_sys::lv_obj_set_size(btn, Self::to_coord(key_w), Self::to_coord(key_h));
+                    lvgl_sys::lv_obj_set_style_radius(btn, 7, 0);
+                    lvgl_sys::lv_obj_set_style_bg_color(
+                        btn,
+                        lvgl_sys::_LV_COLOR_MAKE(255, 255, 255),
+                        0,
+                    );
+                    lvgl_sys::lv_obj_set_style_bg_opa(btn, 255, 0);
+                    lvgl_sys::lv_obj_set_style_border_width(btn, 1, 0);
+                    lvgl_sys::lv_obj_set_style_border_color(
+                        btn,
+                        lvgl_sys::_LV_COLOR_MAKE(203, 211, 223),
+                        0,
+                    );
+                    lvgl_sys::lv_obj_clear_flag(btn, lvgl_sys::LV_OBJ_FLAG_SCROLLABLE);
+                    let label = lvgl_sys::lv_label_create(btn);
+                    lvgl_sys::lv_obj_set_style_text_color(
+                        label,
+                        lvgl_sys::_LV_COLOR_MAKE(34, 40, 52),
+                        0,
+                    );
+                    lvgl_sys::lv_obj_set_style_text_font(
+                        label,
+                        &lvgl_sys::lv_font_montserrat_48 as *const _ as *const lvgl_sys::lv_font_t,
+                        0,
+                    );
+                    lvgl_sys::lv_obj_align(label, lvgl_sys::LV_ALIGN_CENTER as u8, 0, 0);
+                    keyboard_key_buttons[row][col] = btn;
+                    keyboard_key_labels[row][col] = label;
+                }
+            }
+
             self.ui = Some(LvglUiObjects {
                 debug_panel,
                 debug_label,
@@ -1669,6 +1871,14 @@ impl LvglUiCore {
                 snapshot_layer,
                 snapshot_img_primary,
                 snapshot_img_secondary,
+                keyboard_layer,
+                keyboard_back_button,
+                keyboard_ok_button,
+                keyboard_title_label,
+                keyboard_input_box,
+                keyboard_input_label,
+                keyboard_key_buttons,
+                keyboard_key_labels,
             });
         }
     }
@@ -2050,6 +2260,161 @@ impl LvglUiCore {
         }
     }
 
+    fn update_keyboard_overlay(&self, frame: &UiFrame, ui: &LvglUiObjects) {
+        let Some(keyboard) = frame.keyboard.as_ref() else {
+            Self::set_obj_hidden(ui.keyboard_layer, true);
+            return;
+        };
+
+        Self::set_obj_hidden(ui.keyboard_layer, false);
+        Self::set_label_text(ui.keyboard_title_label, &keyboard.label);
+        let cursor = keyboard.cursor.min(keyboard.buffer.len());
+        let input = format!(
+            "{}|{}",
+            &keyboard.buffer[..cursor],
+            &keyboard.buffer[cursor..]
+        );
+        Self::set_label_text(ui.keyboard_input_label, &input);
+
+        unsafe {
+            let back_selected = matches!(keyboard.focus, crate::ui::keyboard::KeyboardFocus::Back);
+            let ok_selected = matches!(keyboard.focus, crate::ui::keyboard::KeyboardFocus::Ok);
+            lvgl_sys::lv_obj_set_style_border_width(
+                ui.keyboard_back_button,
+                if back_selected { 3 } else { 2 },
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_border_color(
+                ui.keyboard_back_button,
+                if back_selected {
+                    lvgl_sys::_LV_COLOR_MAKE(37, 99, 235)
+                } else {
+                    lvgl_sys::_LV_COLOR_MAKE(199, 208, 223)
+                },
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_border_width(
+                ui.keyboard_ok_button,
+                if ok_selected { 3 } else { 0 },
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_border_color(
+                ui.keyboard_ok_button,
+                lvgl_sys::_LV_COLOR_MAKE(255, 255, 255),
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_outline_width(
+                ui.keyboard_ok_button,
+                if ok_selected { 4 } else { 0 },
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_outline_color(
+                ui.keyboard_ok_button,
+                lvgl_sys::_LV_COLOR_MAKE(37, 99, 235),
+                0,
+            );
+            lvgl_sys::lv_obj_set_style_outline_pad(ui.keyboard_ok_button, 2, 0);
+            lvgl_sys::lv_obj_set_style_border_color(
+                ui.keyboard_input_box,
+                if keyboard.invalid {
+                    lvgl_sys::_LV_COLOR_MAKE(224, 60, 60)
+                } else {
+                    lvgl_sys::_LV_COLOR_MAKE(214, 220, 232)
+                },
+                0,
+            );
+        }
+
+        let rows = keyboard.layout_rows();
+        let width = self.width as i32;
+        let height = self.height as i32;
+        let top_h = height / 3;
+        let key_area_top = top_h + 10;
+        let key_area_h = height - key_area_top - 14;
+        let key_gap = 7;
+        let key_h = (key_area_h - key_gap * 3) / 4;
+        for row in 0..KEYBOARD_ROWS {
+            let row_gap_count = rows
+                .get(row)
+                .map(|layout_row| layout_row.keys.len().saturating_sub(1) as i32)
+                .unwrap_or(0);
+            let total_half_units = rows
+                .get(row)
+                .map(|layout_row| {
+                    i32::from(layout_row.offset_half_units)
+                        + layout_row
+                            .keys
+                            .iter()
+                            .map(|key| i32::from(key.span_half_units))
+                            .sum::<i32>()
+                })
+                .unwrap_or(1)
+                .max(1);
+            let half_unit_w = (width - 28 - key_gap * row_gap_count) / total_half_units;
+            let mut cursor_x = 14
+                + rows
+                    .get(row)
+                    .map(|layout_row| i32::from(layout_row.offset_half_units) * half_unit_w)
+                    .unwrap_or(0);
+            for col in 0..KEYBOARD_MAX_COLS {
+                let btn = ui.keyboard_key_buttons[row][col];
+                let label = ui.keyboard_key_labels[row][col];
+                let Some(layout_row) = rows.get(row) else {
+                    Self::set_obj_hidden(btn, true);
+                    continue;
+                };
+                let Some(key) = layout_row.keys.get(col) else {
+                    Self::set_obj_hidden(btn, true);
+                    continue;
+                };
+                let selected = matches!(
+                    keyboard.focus,
+                    crate::ui::keyboard::KeyboardFocus::Key { row: sr, col: sc }
+                        if sr == row && sc == col
+                );
+                let action_key = matches!(
+                    key.action,
+                    crate::ui::keyboard::KeyboardAction::Backspace
+                        | crate::ui::keyboard::KeyboardAction::Shift
+                        | crate::ui::keyboard::KeyboardAction::Mode(_)
+                        | crate::ui::keyboard::KeyboardAction::CursorLeft
+                        | crate::ui::keyboard::KeyboardAction::CursorRight
+                        | crate::ui::keyboard::KeyboardAction::Submit
+                );
+                let key_w = half_unit_w * i32::from(key.span_half_units)
+                    + key_gap * (i32::from(key.span_half_units) / 2 - 1).max(0);
+                let x = cursor_x;
+                let y = key_area_top + row as i32 * (key_h + key_gap);
+                cursor_x += key_w + key_gap;
+                Self::set_obj_hidden(btn, false);
+                Self::set_label_text(label, key.label);
+                unsafe {
+                    lvgl_sys::lv_obj_set_pos(btn, Self::to_coord(x), Self::to_coord(y));
+                    lvgl_sys::lv_obj_set_size(btn, Self::to_coord(key_w), Self::to_coord(key_h));
+                    lvgl_sys::lv_obj_set_style_border_width(btn, if selected { 3 } else { 1 }, 0);
+                    lvgl_sys::lv_obj_set_style_border_color(
+                        btn,
+                        if selected {
+                            lvgl_sys::_LV_COLOR_MAKE(37, 99, 235)
+                        } else {
+                            lvgl_sys::_LV_COLOR_MAKE(203, 211, 223)
+                        },
+                        0,
+                    );
+                    lvgl_sys::lv_obj_set_style_bg_color(
+                        btn,
+                        if action_key {
+                            lvgl_sys::_LV_COLOR_MAKE(233, 237, 245)
+                        } else {
+                            lvgl_sys::_LV_COLOR_MAKE(255, 255, 255)
+                        },
+                        0,
+                    );
+                }
+            }
+        }
+    }
+
     pub(super) fn sync_ui(&mut self, frame: &UiFrame) {
         let Some(ui) = self.ui else {
             return;
@@ -2397,5 +2762,6 @@ impl LvglUiCore {
         self.last_synced_frame = Some(frame.clone());
         self.last_page = Some(frame.page);
         self.last_launcher_page = frame.launcher_page;
+        self.update_keyboard_overlay(frame, &ui);
     }
 }

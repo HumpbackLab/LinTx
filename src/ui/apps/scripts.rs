@@ -7,6 +7,7 @@ use crate::{
     ui::{
         apps::{common::elrs_list_lines, AppSpec, UiAppContext, UiAppModule},
         input::UiInputEvent,
+        keyboard::{validate_bind_phrase, KeyboardField, KeyboardOverlay},
         model::{AppId, UiFrame},
     },
 };
@@ -46,6 +47,10 @@ impl Default for LocalElrsConfig {
 
 impl UiAppModule for ScriptsApp {
     fn on_event(&self, frame: &mut UiFrame, event: UiInputEvent, ctx: &UiAppContext<'_>) {
+        if handle_bind_phrase_open(frame, event, ctx.ui_feedback_tx) {
+            return;
+        }
+
         if is_local_fallback(frame) {
             ensure_local_state(frame);
             if handle_local_event(frame, event, ctx.ui_feedback_tx) {
@@ -63,7 +68,9 @@ impl UiAppModule for ScriptsApp {
             UiInputEvent::Right => ctx.elrs_cmd_tx.send(ElrsCommandMsg::ValueInc),
             UiInputEvent::Open => ctx.elrs_cmd_tx.send(ElrsCommandMsg::Activate),
             UiInputEvent::PageNext => ctx.elrs_cmd_tx.send(ElrsCommandMsg::Refresh),
-            UiInputEvent::Quit => {}
+            UiInputEvent::Quit
+            | UiInputEvent::KeyboardTap { .. }
+            | UiInputEvent::KeyboardSubmit => {}
         }
     }
 
@@ -111,6 +118,108 @@ impl UiAppModule for ScriptsApp {
     fn intercept_back(&self, frame: &UiFrame) -> bool {
         !frame.elrs.can_leave
     }
+
+    fn on_keyboard_submit(
+        &self,
+        frame: &mut UiFrame,
+        field: KeyboardField,
+        value: &str,
+        ctx: &UiAppContext<'_>,
+    ) -> bool {
+        if field != KeyboardField::BindPhrase || validate_bind_phrase(value).is_err() {
+            return false;
+        }
+
+        if is_local_fallback(frame) {
+            let mut cfg = load_local_config();
+            cfg.bind_phrase = value.to_string();
+            if save_local_config(&cfg).is_ok() {
+                apply_local_state(frame, &cfg, Some("Bind phrase saved"));
+                set_local_feedback(
+                    frame,
+                    ctx.ui_feedback_tx,
+                    UiFeedbackSeverity::Success,
+                    UiFeedbackMotion::Pulse,
+                    "Bind phrase saved",
+                );
+                true
+            } else {
+                set_local_feedback(
+                    frame,
+                    ctx.ui_feedback_tx,
+                    UiFeedbackSeverity::Error,
+                    UiFeedbackMotion::ShakeX,
+                    "Bind phrase save failed",
+                );
+                false
+            }
+        } else {
+            ctx.elrs_cmd_tx
+                .send(ElrsCommandMsg::SetBindPhrase(value.to_string()));
+            true
+        }
+    }
+}
+
+fn handle_bind_phrase_open(
+    frame: &mut UiFrame,
+    event: UiInputEvent,
+    ui_feedback_tx: &rpos::channel::Sender<UiInteractionFeedback>,
+) -> bool {
+    if event != UiInputEvent::Open || !is_bind_phrase_selected(frame) {
+        if matches!(
+            event,
+            UiInputEvent::Up
+                | UiInputEvent::Down
+                | UiInputEvent::Left
+                | UiInputEvent::Right
+                | UiInputEvent::Back
+                | UiInputEvent::PagePrev
+                | UiInputEvent::PageNext
+                | UiInputEvent::KeyboardTap { .. }
+                | UiInputEvent::KeyboardSubmit
+        ) {
+            frame.keyboard_armed_field = None;
+        }
+        return false;
+    }
+
+    if frame.keyboard_armed_field == Some(KeyboardField::BindPhrase) {
+        let mut keyboard = KeyboardOverlay::bind_phrase(current_bind_phrase_value(frame));
+        keyboard.cursor = keyboard.buffer.len();
+        frame.keyboard = Some(keyboard);
+        frame.keyboard_armed_field = None;
+        return true;
+    }
+
+    frame.keyboard_armed_field = Some(KeyboardField::BindPhrase);
+    set_local_feedback(
+        frame,
+        ui_feedback_tx,
+        UiFeedbackSeverity::Busy,
+        UiFeedbackMotion::Pulse,
+        "Click to edit",
+    );
+    true
+}
+
+fn is_bind_phrase_selected(frame: &UiFrame) -> bool {
+    frame
+        .elrs
+        .params
+        .get(frame.elrs.selected_idx)
+        .map(|entry| entry.id == "bind_phrase")
+        .unwrap_or(false)
+}
+
+fn current_bind_phrase_value(frame: &UiFrame) -> String {
+    frame
+        .elrs
+        .params
+        .get(frame.elrs.selected_idx)
+        .map(|entry| entry.value.clone())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_BIND_PHRASE.to_string())
 }
 
 fn is_local_fallback(frame: &UiFrame) -> bool {
@@ -214,7 +323,9 @@ fn handle_local_event(
                 true
             }
             UiInputEvent::PageNext => true,
-            UiInputEvent::Quit => false,
+            UiInputEvent::Quit
+            | UiInputEvent::KeyboardTap { .. }
+            | UiInputEvent::KeyboardSubmit => false,
         }
     } else {
         match event {
@@ -240,7 +351,9 @@ fn handle_local_event(
                 true
             }
             UiInputEvent::Back | UiInputEvent::PagePrev => false,
-            UiInputEvent::Quit => false,
+            UiInputEvent::Quit
+            | UiInputEvent::KeyboardTap { .. }
+            | UiInputEvent::KeyboardSubmit => false,
         }
     }
 }
@@ -525,10 +638,18 @@ fn cycle_editor_char(frame: &mut UiFrame, delta: isize) {
 
 #[cfg(test)]
 mod tests {
-    use super::{local_feedback_target, set_local_feedback};
+    use super::{local_feedback_target, set_local_feedback, SCRIPTS_APP};
     use crate::{
-        messages::{UiFeedbackMotion, UiFeedbackSeverity, UiFeedbackSlot, UiFeedbackTarget},
-        ui::model::UiFrame,
+        messages::{
+            ActiveModelMsg, ElrsCommandMsg, SystemConfigMsg, UiFeedbackMotion, UiFeedbackSeverity,
+            UiFeedbackSlot, UiFeedbackTarget, UsbGamepadCommandMsg,
+        },
+        ui::{
+            apps::{UiAppContext, UiAppModule},
+            input::UiInputEvent,
+            keyboard::KeyboardField,
+            model::UiFrame,
+        },
     };
     use rpos::channel::Channel;
 
@@ -579,5 +700,61 @@ mod tests {
             UiFeedbackTarget::FieldId("tx_power".to_string())
         );
         assert!(second.seq > first.seq);
+    }
+
+    #[test]
+    fn test_bind_phrase_open_requires_second_confirm_to_show_keyboard() {
+        let (config_tx, _config_rx) = Channel::<SystemConfigMsg>::new();
+        let (active_model_tx, _active_model_rx) = Channel::<ActiveModelMsg>::new();
+        let (elrs_cmd_tx, _elrs_cmd_rx) = Channel::<ElrsCommandMsg>::new();
+        let (ui_feedback_tx, mut ui_feedback_rx) = Channel::new();
+        let (usb_gamepad_cmd_tx, _usb_gamepad_cmd_rx) = Channel::<UsbGamepadCommandMsg>::new();
+        let ctx = UiAppContext {
+            config_tx: &config_tx,
+            active_model_tx: &active_model_tx,
+            elrs_cmd_tx: &elrs_cmd_tx,
+            ui_feedback_tx: &ui_feedback_tx,
+            usb_gamepad_cmd_tx: &usb_gamepad_cmd_tx,
+        };
+        let mut frame = UiFrame::default();
+        frame.elrs.selected_idx = 4;
+
+        SCRIPTS_APP.on_event(&mut frame, UiInputEvent::Open, &ctx);
+
+        assert!(frame.keyboard.is_none());
+        assert_eq!(frame.keyboard_armed_field, Some(KeyboardField::BindPhrase));
+        assert_eq!(
+            ui_feedback_rx.try_read().expect("feedback").message,
+            "Click to edit"
+        );
+
+        SCRIPTS_APP.on_event(&mut frame, UiInputEvent::Open, &ctx);
+
+        assert!(frame.keyboard.is_some());
+        assert_eq!(frame.keyboard_armed_field, None);
+    }
+
+    #[test]
+    fn test_bind_phrase_keyboard_submit_rejects_invalid_value() {
+        let (config_tx, _config_rx) = Channel::<SystemConfigMsg>::new();
+        let (active_model_tx, _active_model_rx) = Channel::<ActiveModelMsg>::new();
+        let (elrs_cmd_tx, _elrs_cmd_rx) = Channel::<ElrsCommandMsg>::new();
+        let (ui_feedback_tx, _ui_feedback_rx) = Channel::new();
+        let (usb_gamepad_cmd_tx, _usb_gamepad_cmd_rx) = Channel::<UsbGamepadCommandMsg>::new();
+        let ctx = UiAppContext {
+            config_tx: &config_tx,
+            active_model_tx: &active_model_tx,
+            elrs_cmd_tx: &elrs_cmd_tx,
+            ui_feedback_tx: &ui_feedback_tx,
+            usb_gamepad_cmd_tx: &usb_gamepad_cmd_tx,
+        };
+        let mut frame = UiFrame::default();
+
+        assert!(!SCRIPTS_APP.on_keyboard_submit(
+            &mut frame,
+            KeyboardField::BindPhrase,
+            "ABC",
+            &ctx
+        ));
     }
 }

@@ -4,6 +4,7 @@ pub mod backend;
 pub mod catalog;
 pub mod feedback;
 pub mod input;
+pub mod keyboard;
 pub mod model;
 pub mod runner;
 

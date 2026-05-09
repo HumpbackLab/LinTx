@@ -66,6 +66,21 @@ impl LvglBackend for TerminalBackend {
                 println!("{}", apps::render_terminal_detail(app, frame));
             }
         }
+        if let Some(keyboard) = frame.keyboard.as_ref() {
+            println!("-----------------------------------------------");
+            println!(
+                "KEYBOARD: {} [{}]{}",
+                keyboard.label,
+                keyboard.buffer,
+                if keyboard.invalid { " INVALID" } else { "" }
+            );
+            println!(
+                "Selected: row {} col {} key {}",
+                keyboard.selected_row,
+                keyboard.selected_col,
+                keyboard.selected_key().label
+            );
+        }
         let _ = std::io::stdout().flush();
     }
 

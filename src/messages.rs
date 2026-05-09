@@ -344,7 +344,7 @@ impl Default for ElrsStateMsg {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ElrsCommandMsg {
     Refresh,
     Back,
@@ -353,6 +353,7 @@ pub enum ElrsCommandMsg {
     ValueDec,
     ValueInc,
     Activate,
+    SetBindPhrase(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

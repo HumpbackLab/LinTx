@@ -284,6 +284,9 @@ impl ElrsUiState {
             ElrsCommandMsg::ValueDec => self.adjust_selected(-1, protocol, connected),
             ElrsCommandMsg::ValueInc => self.adjust_selected(1, protocol, connected),
             ElrsCommandMsg::Activate => self.activate_selected(protocol, connected),
+            ElrsCommandMsg::SetBindPhrase(value) => {
+                self.set_bind_phrase(value, protocol, connected)
+            }
         }
     }
 
@@ -336,44 +339,56 @@ impl ElrsUiState {
                 let Some(editor) = self.editor.as_ref() else {
                     return "Edit unavailable".to_string();
                 };
-                self.config.bind_phrase = editor.as_string();
-                self.editor = None;
-                match self.persist() {
-                    Ok(()) => {
-                        let message = if self.config.rf_output_enabled && connected {
-                            let status = protocol.request(ElrsOperation::SetBindPhrase(
-                                self.config.bind_phrase.clone(),
-                            ));
-                            match status {
-                                ElrsOperationStatus::Queued(_) => {
-                                    "Bind phrase saved and queued".to_string()
-                                }
-                                _ => format!("Bind phrase saved locally; {}", status.message()),
-                            }
-                        } else {
-                            "Bind phrase saved locally".to_string()
-                        };
-                        self.emit_feedback(
-                            UiFeedbackSeverity::Success,
-                            UiFeedbackMotion::Pulse,
-                            message.clone(),
-                        );
-                        message
-                    }
-                    Err(err) => {
-                        let message = format!("Bind phrase save failed: {err}");
-                        self.emit_feedback(
-                            UiFeedbackSeverity::Error,
-                            UiFeedbackMotion::ShakeX,
-                            message.clone(),
-                        );
-                        message
-                    }
-                }
+                self.set_bind_phrase(editor.as_string(), protocol, connected)
             }
             ElrsCommandMsg::Refresh => {
                 self.clear_feedback();
                 "Editing bind phrase".to_string()
+            }
+            ElrsCommandMsg::SetBindPhrase(value) => {
+                self.set_bind_phrase(value, protocol, connected)
+            }
+        }
+    }
+
+    fn set_bind_phrase(
+        &mut self,
+        value: String,
+        protocol: &mut ElrsProtocolRuntime,
+        connected: bool,
+    ) -> String {
+        self.config.bind_phrase = value;
+        self.editor = None;
+        match self.persist() {
+            Ok(()) => {
+                let message = if self.config.rf_output_enabled && connected {
+                    let status = protocol.request(ElrsOperation::SetBindPhrase(
+                        self.config.bind_phrase.clone(),
+                    ));
+                    match status {
+                        ElrsOperationStatus::Queued(_) => {
+                            "Bind phrase saved and queued".to_string()
+                        }
+                        _ => format!("Bind phrase saved locally; {}", status.message()),
+                    }
+                } else {
+                    "Bind phrase saved locally".to_string()
+                };
+                self.emit_feedback(
+                    UiFeedbackSeverity::Success,
+                    UiFeedbackMotion::Pulse,
+                    message.clone(),
+                );
+                message
+            }
+            Err(err) => {
+                let message = format!("Bind phrase save failed: {err}");
+                self.emit_feedback(
+                    UiFeedbackSeverity::Error,
+                    UiFeedbackMotion::ShakeX,
+                    message.clone(),
+                );
+                message
             }
         }
     }
@@ -962,7 +977,7 @@ fn rf_link_service_main(argc: u32, argv: *const &str) {
                 let prev_rf_enabled = ui_state.config.rf_output_enabled;
                 let prev_wifi_manual_on = ui_state.config.wifi_manual_on;
                 let prev_bind_active = protocol.bind_active();
-                ui_status_text = ui_state.handle_command(cmd, &mut protocol, dev.is_some());
+                ui_status_text = ui_state.handle_command(cmd.clone(), &mut protocol, dev.is_some());
                 if let Some(feedback) = ui_state.take_feedback() {
                     ui_feedback_tx.send(feedback);
                 }
