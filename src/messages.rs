@@ -304,9 +304,9 @@ impl Default for ElrsStateMsg {
                     selectable: true,
                 },
                 ElrsParamEntry {
-                    id: "bind_phrase".to_string(),
-                    label: "Bind Phrase".to_string(),
-                    value: "654321".to_string(),
+                    id: "tx_max_power".to_string(),
+                    label: "TX Max Power".to_string(),
+                    value: "1000mW".to_string(),
                     selectable: true,
                 },
                 ElrsParamEntry {
@@ -353,7 +353,6 @@ pub enum ElrsCommandMsg {
     ValueDec,
     ValueInc,
     Activate,
-    SetBindPhrase(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

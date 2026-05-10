@@ -41,9 +41,7 @@ const CRSF_RC_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 const WIFI_EXIT_SILENCE_INTERVAL: Duration = Duration::from_secs(2);
 const DEFAULT_RF_UART: &str = "/dev/ttyS2";
 const DEFAULT_RF_LOG_PATH: &str = "/tmp/lintx-elrs/rf_link_service.log";
-const DEFAULT_BIND_PHRASE: &str = "654321";
 const ELRS_POWER_LEVELS_MW: [u16; 6] = [10, 25, 100, 250, 500, 1000];
-const EDITOR_CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789-_";
 
 macro_rules! rf_logln {
     ($($arg:tt)*) => {{
@@ -121,95 +119,30 @@ mod rc_channel_tests {
 }
 
 #[derive(Debug, Clone)]
-struct EditorState {
-    buffer: Vec<u8>,
-    cursor: usize,
-}
-
-impl EditorState {
-    fn new(initial: &str) -> Self {
-        let seed = if initial.is_empty() {
-            DEFAULT_BIND_PHRASE
-        } else {
-            initial
-        };
-        let mut buffer = seed.as_bytes().to_vec();
-        sanitize_editor_buffer(&mut buffer);
-        if buffer.is_empty() {
-            buffer.push(EDITOR_CHARSET[0]);
-        }
-        Self { buffer, cursor: 0 }
-    }
-
-    fn move_cursor(&mut self, delta: isize) {
-        if self.buffer.is_empty() {
-            self.cursor = 0;
-            return;
-        }
-
-        if delta.is_negative() {
-            self.cursor = self.cursor.saturating_sub(delta.unsigned_abs());
-        } else {
-            self.cursor = self
-                .cursor
-                .saturating_add(delta as usize)
-                .min(self.buffer.len().saturating_sub(1));
-        }
-    }
-
-    fn cycle_char(&mut self, delta: isize) {
-        if self.buffer.is_empty() {
-            self.buffer.push(EDITOR_CHARSET[0]);
-            self.cursor = 0;
-            return;
-        }
-
-        let current = self.buffer[self.cursor];
-        let current_idx = char_index(current).unwrap_or(0);
-        let len = EDITOR_CHARSET.len() as isize;
-        let next_idx = (current_idx as isize + delta).rem_euclid(len) as usize;
-        self.buffer[self.cursor] = EDITOR_CHARSET[next_idx];
-    }
-
-    fn as_string(&self) -> String {
-        String::from_utf8_lossy(&self.buffer).to_string()
-    }
-}
-
-#[derive(Debug, Clone)]
 struct ElrsUiState {
     config: ElrsUiConfig,
     selected_idx: usize,
     bind_active: bool,
     bind_waiting_for_link: bool,
-    editor: Option<EditorState>,
     feedback_seq: u32,
     interaction_feedback: Option<UiInteractionFeedback>,
 }
 
 impl ElrsUiState {
-    const SELECTABLE_PARAM_COUNT: usize = 6;
+    const SELECTABLE_PARAM_COUNT: usize = 5;
 
     fn load() -> Self {
         let mut config = store::load_radio_config()
             .map(|radio| radio.elrs)
             .unwrap_or_default();
-        if config.bind_phrase.is_empty() {
-            config.bind_phrase = DEFAULT_BIND_PHRASE.to_string();
-        }
         Self {
             config,
             selected_idx: 0,
             bind_active: false,
             bind_waiting_for_link: false,
-            editor: None,
             feedback_seq: 0,
             interaction_feedback: None,
         }
-    }
-
-    fn editor_label(&self) -> &'static str {
-        "Bind Phrase"
     }
 
     fn selected_feedback_target(&self) -> UiFeedbackTarget {
@@ -219,7 +152,6 @@ impl ElrsUiState {
             2 => UiFeedbackTarget::FieldId("bind".to_string()),
             3 => UiFeedbackTarget::FieldId("tx_power".to_string()),
             4 => UiFeedbackTarget::FieldId("tx_max_power".to_string()),
-            5 => UiFeedbackTarget::FieldId("bind_phrase".to_string()),
             _ => UiFeedbackTarget::SelectedListRow,
         }
     }
@@ -260,10 +192,6 @@ impl ElrsUiState {
         protocol: &mut ElrsProtocolRuntime,
         connected: bool,
     ) -> String {
-        if self.editor.is_some() {
-            return self.handle_editor_command(cmd, protocol, connected);
-        }
-
         match cmd {
             ElrsCommandMsg::Back => {
                 self.clear_feedback();
@@ -284,112 +212,6 @@ impl ElrsUiState {
             ElrsCommandMsg::ValueDec => self.adjust_selected(-1, protocol, connected),
             ElrsCommandMsg::ValueInc => self.adjust_selected(1, protocol, connected),
             ElrsCommandMsg::Activate => self.activate_selected(protocol, connected),
-            ElrsCommandMsg::SetBindPhrase(value) => {
-                self.set_bind_phrase(value, protocol, connected)
-            }
-        }
-    }
-
-    fn handle_editor_command(
-        &mut self,
-        cmd: ElrsCommandMsg,
-        protocol: &mut ElrsProtocolRuntime,
-        connected: bool,
-    ) -> String {
-        if self.editor.is_none() {
-            return "Edit unavailable".to_string();
-        }
-
-        match cmd {
-            ElrsCommandMsg::Back => {
-                self.editor = None;
-                let message = "Bind phrase edit cancelled".to_string();
-                self.emit_feedback(
-                    UiFeedbackSeverity::Error,
-                    UiFeedbackMotion::ShakeX,
-                    message.clone(),
-                );
-                message
-            }
-            ElrsCommandMsg::SelectPrev => {
-                self.clear_feedback();
-                let editor = self.editor.as_mut().expect("editor checked");
-                editor.cycle_char(-1);
-                format!("Editing bind phrase: {}", editor.as_string())
-            }
-            ElrsCommandMsg::SelectNext => {
-                self.clear_feedback();
-                let editor = self.editor.as_mut().expect("editor checked");
-                editor.cycle_char(1);
-                format!("Editing bind phrase: {}", editor.as_string())
-            }
-            ElrsCommandMsg::ValueDec => {
-                self.clear_feedback();
-                let editor = self.editor.as_mut().expect("editor checked");
-                editor.move_cursor(-1);
-                format!("Cursor {}", editor.cursor.saturating_add(1))
-            }
-            ElrsCommandMsg::ValueInc => {
-                self.clear_feedback();
-                let editor = self.editor.as_mut().expect("editor checked");
-                editor.move_cursor(1);
-                format!("Cursor {}", editor.cursor.saturating_add(1))
-            }
-            ElrsCommandMsg::Activate => {
-                let Some(editor) = self.editor.as_ref() else {
-                    return "Edit unavailable".to_string();
-                };
-                self.set_bind_phrase(editor.as_string(), protocol, connected)
-            }
-            ElrsCommandMsg::Refresh => {
-                self.clear_feedback();
-                "Editing bind phrase".to_string()
-            }
-            ElrsCommandMsg::SetBindPhrase(value) => {
-                self.set_bind_phrase(value, protocol, connected)
-            }
-        }
-    }
-
-    fn set_bind_phrase(
-        &mut self,
-        value: String,
-        protocol: &mut ElrsProtocolRuntime,
-        connected: bool,
-    ) -> String {
-        self.config.bind_phrase = value;
-        self.editor = None;
-        match self.persist() {
-            Ok(()) => {
-                let message = if self.config.rf_output_enabled && connected {
-                    let status = protocol.request(ElrsOperation::SetBindPhrase(
-                        self.config.bind_phrase.clone(),
-                    ));
-                    match status {
-                        ElrsOperationStatus::Queued(_) => {
-                            "Bind phrase saved and queued".to_string()
-                        }
-                        _ => format!("Bind phrase saved locally; {}", status.message()),
-                    }
-                } else {
-                    "Bind phrase saved locally".to_string()
-                };
-                self.emit_feedback(
-                    UiFeedbackSeverity::Success,
-                    UiFeedbackMotion::Pulse,
-                    message.clone(),
-                );
-                message
-            }
-            Err(err) => {
-                let message = format!("Bind phrase save failed: {err}");
-                self.emit_feedback(
-                    UiFeedbackSeverity::Error,
-                    UiFeedbackMotion::ShakeX,
-                    message.clone(),
-                );
-                message
-            }
         }
     }
 
@@ -633,11 +455,6 @@ impl ElrsUiState {
                     }
                 }
             }
-            5 => {
-                self.editor = Some(EditorState::new(&self.config.bind_phrase));
-                self.clear_feedback();
-                "Editing bind phrase".to_string()
-            }
             _ => {
                 self.clear_feedback();
                 self.current_item_status()
@@ -648,11 +465,6 @@ impl ElrsUiState {
     fn activate_selected(&mut self, protocol: &mut ElrsProtocolRuntime, connected: bool) -> String {
         match self.selected_idx {
             0..=4 => self.adjust_selected(1, protocol, connected),
-            5 => {
-                self.editor = Some(EditorState::new(&self.config.bind_phrase));
-                self.clear_feedback();
-                "Editing bind phrase".to_string()
-            }
             _ => {
                 self.clear_feedback();
                 self.current_item_status()
@@ -687,7 +499,6 @@ impl ElrsUiState {
             }
             3 => format!("TX power {}mW", self.config.tx_power_mw),
             4 => format!("TX max power {}mW", self.config.tx_max_power_mw),
-            5 => "Bind phrase".to_string(),
             _ => String::new(),
         }
     }
@@ -696,10 +507,6 @@ impl ElrsUiState {
         match store::load_radio_config() {
             Ok(radio) => {
                 self.config = radio.elrs;
-                if self.config.bind_phrase.is_empty() {
-                    self.config.bind_phrase = DEFAULT_BIND_PHRASE.to_string();
-                }
-                self.editor = None;
                 self.bind_active = false;
                 self.bind_waiting_for_link = false;
                 let message = "ELRS config reloaded".to_string();
@@ -816,21 +623,6 @@ impl LinkMonitorState {
     fn feedback_text(&self) -> String {
         self.feedback_text.clone()
     }
-}
-
-fn sanitize_editor_buffer(buffer: &mut Vec<u8>) {
-    for ch in buffer.iter_mut() {
-        if char_index(*ch).is_none() {
-            *ch = EDITOR_CHARSET[0];
-        }
-    }
-    if buffer.len() > 32 {
-        buffer.truncate(32);
-    }
-}
-
-fn char_index(ch: u8) -> Option<usize> {
-    EDITOR_CHARSET.iter().position(|candidate| *candidate == ch)
 }
 
 fn shift_power_level(current: u16, delta: isize) -> u16 {
@@ -1479,7 +1271,6 @@ fn build_elrs_state(
     link_monitor: &LinkMonitorState,
     dev_name: &str,
 ) -> ElrsStateMsg {
-    let editor_active = ui_state.editor.is_some();
     let link_active = ui_state.config.rf_output_enabled && !telemetry.telemetry_is_stale();
     let module_info = protocol.device_info();
     let module_name = module_info
@@ -1508,27 +1299,17 @@ fn build_elrs_state(
     } else {
         "SEARCH".to_string()
     };
-    let (editor_buffer, editor_cursor) = if let Some(editor) = ui_state.editor.as_ref() {
-        (editor.as_string(), editor.cursor)
-    } else {
-        (String::new(), 0)
-    };
-
     ElrsStateMsg {
         connected,
         rf_output_enabled: ui_state.config.rf_output_enabled,
         link_active,
         busy: ui_state.bind_active || ui_state.bind_waiting_for_link,
-        can_leave: !editor_active,
+        can_leave: true,
         path: dev_name.to_string(),
-        editor_active,
-        editor_label: if editor_active {
-            ui_state.editor_label().to_string()
-        } else {
-            String::new()
-        },
-        editor_buffer,
-        editor_cursor,
+        editor_active: false,
+        editor_label: String::new(),
+        editor_buffer: String::new(),
+        editor_cursor: 0,
         module_name,
         device_name: if let Some(info) = module_info {
             format!(
@@ -1604,16 +1385,6 @@ fn build_elrs_state(
                 id: "tx_max_power".to_string(),
                 label: "TX Max Power".to_string(),
                 value: format!("{}mW", ui_state.config.tx_max_power_mw),
-                selectable: true,
-            },
-            crate::messages::ElrsParamEntry {
-                id: "bind_phrase".to_string(),
-                label: "Bind Phrase".to_string(),
-                value: if ui_state.config.bind_phrase.is_empty() {
-                    DEFAULT_BIND_PHRASE.to_string()
-                } else {
-                    ui_state.config.bind_phrase.clone()
-                },
                 selectable: true,
             },
             crate::messages::ElrsParamEntry {
@@ -1727,7 +1498,7 @@ fn now_unix_secs() -> u64 {
 mod tests {
     use super::{
         build_elrs_state, check_frame_crc, derive_elrs_model_id, extract_crsf_frames,
-        shift_power_level, wifi_exit_silence_active, EditorState, ElrsUiState, LinkMonitorState,
+        shift_power_level, wifi_exit_silence_active, ElrsUiState, LinkMonitorState,
         TelemetryStatusState, CRSF_CRC, CRSF_FRAME_BATTERY_ID, CRSF_FRAME_LINK_ID, CRSF_SYNC,
     };
     use crate::{
@@ -1782,17 +1553,6 @@ mod tests {
     }
 
     #[test]
-    fn test_editor_state_cycle_and_cursor() {
-        let mut editor = EditorState::new("ab");
-        editor.move_cursor(1);
-        editor.cycle_char(1);
-        assert_eq!(editor.cursor, 1);
-        assert_eq!(editor.as_string(), "ac");
-        editor.move_cursor(-5);
-        assert_eq!(editor.cursor, 0);
-    }
-
-    #[test]
     fn test_wifi_exit_silence_active_before_deadline() {
         let now = Instant::now();
         assert!(wifi_exit_silence_active(
@@ -1824,7 +1584,8 @@ mod tests {
 
     #[test]
     fn test_build_elrs_state_defaults_to_rf_off() {
-        let ui_state = ElrsUiState::load();
+        let mut ui_state = ElrsUiState::load();
+        ui_state.config.rf_output_enabled = false;
         let telemetry = TelemetryStatusState::default();
         let link_monitor = LinkMonitorState::default();
         let state = build_elrs_state(
@@ -2075,6 +1836,49 @@ mod tests {
             feedback.target,
             UiFeedbackTarget::FieldId("rf_output".to_string())
         );
+    }
+
+    #[test]
+    fn test_bind_queues_direct_bind_with_busy_feedback() {
+        let mut ui_state = ElrsUiState::load();
+        ui_state.selected_idx = 2;
+        ui_state.config.rf_output_enabled = true;
+
+        let mut protocol = ElrsProtocolRuntime::default();
+        protocol.consume_frame(&[
+            0xC8, 0x10, 0x2B, 0xEA, 0xEE, 0x11, 0x00, 0x00, 0x0D, b'B', b'i', b'n', b'd', 0,
+            0x00, 0x00, 0x00,
+        ]);
+
+        let message = ui_state.adjust_selected(1, &mut protocol, true);
+
+        assert_eq!(message, "Bind command queued");
+        let feedback = ui_state
+            .interaction_feedback
+            .as_ref()
+            .expect("feedback should exist");
+        assert_eq!(feedback.severity, UiFeedbackSeverity::Busy);
+        assert_eq!(feedback.target, UiFeedbackTarget::FieldId("bind".to_string()));
+    }
+
+    #[test]
+    fn test_state_omits_bind_phrase_param() {
+        let ui_state = ElrsUiState::load();
+        let protocol = ElrsProtocolRuntime::default();
+        let telemetry = TelemetryStatusState::default();
+        let link_monitor = LinkMonitorState::default();
+
+        let state = build_elrs_state(
+            false,
+            "ELRS".to_string(),
+            &telemetry,
+            &ui_state,
+            &protocol,
+            &link_monitor,
+            "/dev/null",
+        );
+
+        assert!(!state.params.iter().any(|param| param.id == "bind_phrase"));
     }
 }
 

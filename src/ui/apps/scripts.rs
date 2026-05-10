@@ -7,14 +7,11 @@ use crate::{
     ui::{
         apps::{common::elrs_list_lines, AppSpec, UiAppContext, UiAppModule},
         input::UiInputEvent,
-        keyboard::{validate_bind_phrase, KeyboardField, KeyboardOverlay},
         model::{AppId, UiFrame},
     },
 };
 
 const LOCAL_POWER_LEVELS_MW: [u16; 6] = [10, 25, 100, 250, 500, 1000];
-const LOCAL_EDITOR_CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789-_";
-const DEFAULT_BIND_PHRASE: &str = "654321";
 
 pub const SPEC: AppSpec = AppSpec {
     id: AppId::Scripts,
@@ -31,7 +28,6 @@ struct LocalElrsConfig {
     rf_output_enabled: bool,
     wifi_manual_on: bool,
     tx_power_mw: u16,
-    bind_phrase: String,
 }
 
 impl Default for LocalElrsConfig {
@@ -40,17 +36,12 @@ impl Default for LocalElrsConfig {
             rf_output_enabled: false,
             wifi_manual_on: false,
             tx_power_mw: 100,
-            bind_phrase: DEFAULT_BIND_PHRASE.to_string(),
         }
     }
 }
 
 impl UiAppModule for ScriptsApp {
     fn on_event(&self, frame: &mut UiFrame, event: UiInputEvent, ctx: &UiAppContext<'_>) {
-        if handle_bind_phrase_open(frame, event, ctx.ui_feedback_tx) {
-            return;
-        }
-
         if is_local_fallback(frame) {
             ensure_local_state(frame);
             if handle_local_event(frame, event, ctx.ui_feedback_tx) {
@@ -82,19 +73,9 @@ impl UiAppModule for ScriptsApp {
         };
         let busy = if frame.elrs.busy { "BUSY" } else { "READY" };
         let lines = elrs_list_lines(frame);
-        let editor = if frame.elrs.editor_active {
-            format!(
-                "\nEdit: {} = {}\nCursor: {}\n",
-                frame.elrs.editor_label,
-                frame.elrs.editor_buffer,
-                frame.elrs.editor_cursor.saturating_add(1)
-            )
-        } else {
-            String::new()
-        };
 
         format!(
-            "Link: {} ({})\nModule: {}\nDevice: {}\nVersion: {}\nPath: {}\nStatus: {}\n{}\n{}\n{}\n{}\n{}\n\n{}\nEsc Back",
+            "Link: {} ({})\nModule: {}\nDevice: {}\nVersion: {}\nPath: {}\nStatus: {}\n{}\n{}\n{}\n{}\n\n{}\nEsc Back",
             connected,
             busy,
             frame.elrs.module_name,
@@ -102,16 +83,11 @@ impl UiAppModule for ScriptsApp {
             frame.elrs.version,
             frame.elrs.path,
             frame.elrs.status_text,
-            editor,
             lines[0],
             lines[1],
             lines[2],
             lines[3],
-            if frame.elrs.editor_active {
-                "Up/Down: char  Left/Right: move  Enter: save  Esc: cancel"
-            } else {
-                "Up/Down: select  Left/Right: adjust  Enter: open/apply  ]: refresh"
-            },
+            "Up/Down: select  Left/Right: adjust  Enter: open/apply  ]: refresh",
         )
     }
 
@@ -121,105 +97,13 @@ impl UiAppModule for ScriptsApp {
 
     fn on_keyboard_submit(
         &self,
-        frame: &mut UiFrame,
-        field: KeyboardField,
-        value: &str,
-        ctx: &UiAppContext<'_>,
+        _frame: &mut UiFrame,
+        _field: crate::ui::keyboard::KeyboardField,
+        _value: &str,
+        _ctx: &UiAppContext<'_>,
     ) -> bool {
-        if field != KeyboardField::BindPhrase || validate_bind_phrase(value).is_err() {
-            return false;
-        }
-
-        if is_local_fallback(frame) {
-            let mut cfg = load_local_config();
-            cfg.bind_phrase = value.to_string();
-            if save_local_config(&cfg).is_ok() {
-                apply_local_state(frame, &cfg, Some("Bind phrase saved"));
-                set_local_feedback(
-                    frame,
-                    ctx.ui_feedback_tx,
-                    UiFeedbackSeverity::Success,
-                    UiFeedbackMotion::Pulse,
-                    "Bind phrase saved",
-                );
-                true
-            } else {
-                set_local_feedback(
-                    frame,
-                    ctx.ui_feedback_tx,
-                    UiFeedbackSeverity::Error,
-                    UiFeedbackMotion::ShakeX,
-                    "Bind phrase save failed",
-                );
-                false
-            }
-        } else {
-            ctx.elrs_cmd_tx
-                .send(ElrsCommandMsg::SetBindPhrase(value.to_string()));
-            true
-        }
+        false
     }
-}
-
-fn handle_bind_phrase_open(
-    frame: &mut UiFrame,
-    event: UiInputEvent,
-    ui_feedback_tx: &rpos::channel::Sender<UiInteractionFeedback>,
-) -> bool {
-    if event != UiInputEvent::Open || !is_bind_phrase_selected(frame) {
-        if matches!(
-            event,
-            UiInputEvent::Up
-                | UiInputEvent::Down
-                | UiInputEvent::Left
-                | UiInputEvent::Right
-                | UiInputEvent::Back
-                | UiInputEvent::PagePrev
-                | UiInputEvent::PageNext
-                | UiInputEvent::KeyboardTap { .. }
-                | UiInputEvent::KeyboardSubmit
-        ) {
-            frame.keyboard_armed_field = None;
-        }
-        return false;
-    }
-
-    if frame.keyboard_armed_field == Some(KeyboardField::BindPhrase) {
-        let mut keyboard = KeyboardOverlay::bind_phrase(current_bind_phrase_value(frame));
-        keyboard.cursor = keyboard.buffer.len();
-        frame.keyboard = Some(keyboard);
-        frame.keyboard_armed_field = None;
-        return true;
-    }
-
-    frame.keyboard_armed_field = Some(KeyboardField::BindPhrase);
-    set_local_feedback(
-        frame,
-        ui_feedback_tx,
-        UiFeedbackSeverity::Busy,
-        UiFeedbackMotion::Pulse,
-        "Click to edit",
-    );
-    true
-}
-
-fn is_bind_phrase_selected(frame: &UiFrame) -> bool {
-    frame
-        .elrs
-        .params
-        .get(frame.elrs.selected_idx)
-        .map(|entry| entry.id == "bind_phrase")
-        .unwrap_or(false)
-}
-
-fn current_bind_phrase_value(frame: &UiFrame) -> String {
-    frame
-        .elrs
-        .params
-        .get(frame.elrs.selected_idx)
-        .map(|entry| entry.value.clone())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| DEFAULT_BIND_PHRASE.to_string())
 }
 
 fn is_local_fallback(frame: &UiFrame) -> bool {
@@ -241,7 +125,6 @@ fn local_feedback_target(selected_idx: usize) -> UiFeedbackTarget {
         1 => UiFeedbackTarget::FieldId("wifi_manual".to_string()),
         2 => UiFeedbackTarget::FieldId("bind".to_string()),
         3 => UiFeedbackTarget::FieldId("tx_power".to_string()),
-        4 => UiFeedbackTarget::FieldId("bind_phrase".to_string()),
         _ => UiFeedbackTarget::SelectedListRow,
     }
 }
@@ -280,81 +163,32 @@ fn handle_local_event(
 ) -> bool {
     let mut cfg = load_local_config();
 
-    if frame.elrs.editor_active {
-        match event {
-            UiInputEvent::Back | UiInputEvent::PagePrev => {
-                frame.elrs.editor_active = false;
-                frame.elrs.can_leave = true;
-                frame.elrs.status_text = "Bind phrase edit cancelled".to_string();
-                set_local_feedback(
-                    frame,
-                    ui_feedback_tx,
-                    UiFeedbackSeverity::Error,
-                    UiFeedbackMotion::ShakeX,
-                    "Bind phrase edit cancelled",
-                );
-                true
-            }
-            UiInputEvent::Up => {
-                cycle_editor_char(frame, -1);
-                true
-            }
-            UiInputEvent::Down => {
-                cycle_editor_char(frame, 1);
-                true
-            }
-            UiInputEvent::Left => {
-                move_editor_cursor(frame, -1);
-                true
-            }
-            UiInputEvent::Right => {
-                move_editor_cursor(frame, 1);
-                true
-            }
-            UiInputEvent::Open => {
-                cfg.bind_phrase = frame.elrs.editor_buffer.clone();
-                if save_local_config(&cfg).is_ok() {
-                    apply_local_state(frame, &cfg, Some("Bind phrase saved"));
-                } else {
-                    apply_local_state(frame, &cfg, Some("Bind phrase save failed"));
-                }
-                frame.elrs.editor_active = false;
-                frame.elrs.can_leave = true;
-                true
-            }
-            UiInputEvent::PageNext => true,
-            UiInputEvent::Quit
-            | UiInputEvent::KeyboardTap { .. }
-            | UiInputEvent::KeyboardSubmit => false,
+    match event {
+        UiInputEvent::Up => {
+            frame.elrs.selected_idx = frame.elrs.selected_idx.saturating_sub(1);
+            true
         }
-    } else {
-        match event {
-            UiInputEvent::Up => {
-                frame.elrs.selected_idx = frame.elrs.selected_idx.saturating_sub(1);
-                true
-            }
-            UiInputEvent::Down => {
-                frame.elrs.selected_idx = frame.elrs.selected_idx.saturating_add(1).min(4);
-                true
-            }
-            UiInputEvent::Left => {
-                apply_local_adjust(frame, &mut cfg, -1, ui_feedback_tx);
-                true
-            }
-            UiInputEvent::Right | UiInputEvent::Open => {
-                apply_local_adjust(frame, &mut cfg, 1, ui_feedback_tx);
-                true
-            }
-            UiInputEvent::PageNext => {
-                let cfg = load_local_config();
-                apply_local_state(frame, &cfg, Some("ELRS config reloaded"));
-                true
-            }
-            UiInputEvent::Back | UiInputEvent::PagePrev => false,
-            UiInputEvent::Quit
-            | UiInputEvent::KeyboardTap { .. }
-            | UiInputEvent::KeyboardSubmit => false,
+        UiInputEvent::Down => {
+            frame.elrs.selected_idx = frame.elrs.selected_idx.saturating_add(1).min(3);
+            true
         }
+        UiInputEvent::Left => {
+            apply_local_adjust(frame, &mut cfg, -1, ui_feedback_tx);
+            true
+        }
+        UiInputEvent::Right | UiInputEvent::Open => {
+            apply_local_adjust(frame, &mut cfg, 1, ui_feedback_tx);
+            true
+        }
+        UiInputEvent::PageNext => {
+            let cfg = load_local_config();
+            apply_local_state(frame, &cfg, Some("ELRS config reloaded"));
+            true
+        }
+        UiInputEvent::Back | UiInputEvent::PagePrev => false,
+        UiInputEvent::Quit
+        | UiInputEvent::KeyboardTap { .. }
+        | UiInputEvent::KeyboardSubmit => false,
     }
 }
 
@@ -434,18 +268,6 @@ fn apply_local_adjust(
                 )
             }
         }
-        4 => {
-            frame.elrs.editor_active = true;
-            frame.elrs.can_leave = false;
-            frame.elrs.editor_label = "Bind Phrase".to_string();
-            frame.elrs.editor_buffer = if cfg.bind_phrase.is_empty() {
-                DEFAULT_BIND_PHRASE.to_string()
-            } else {
-                cfg.bind_phrase.clone()
-            };
-            frame.elrs.editor_cursor = 0;
-            return apply_local_state(frame, cfg, Some("Editing bind phrase"));
-        }
         _ => {
             return apply_local_state(frame, cfg, Some("ELRS"));
         }
@@ -507,16 +329,6 @@ fn apply_local_state(frame: &mut UiFrame, cfg: &LocalElrsConfig, status: Option<
             selectable: true,
         },
         crate::messages::ElrsParamEntry {
-            id: "bind_phrase".to_string(),
-            label: "Bind Phrase".to_string(),
-            value: if cfg.bind_phrase.is_empty() {
-                DEFAULT_BIND_PHRASE.to_string()
-            } else {
-                cfg.bind_phrase.clone()
-            },
-            selectable: true,
-        },
-        crate::messages::ElrsParamEntry {
             id: "link_state".to_string(),
             label: "Link State".to_string(),
             value: if cfg.rf_output_enabled {
@@ -556,16 +368,10 @@ fn apply_local_state(frame: &mut UiFrame, cfg: &LocalElrsConfig, status: Option<
 fn load_local_config() -> LocalElrsConfig {
     match store::load_radio_config() {
         Ok(radio) => {
-            let bind_phrase = if radio.elrs.bind_phrase.is_empty() {
-                DEFAULT_BIND_PHRASE.to_string()
-            } else {
-                radio.elrs.bind_phrase
-            };
             LocalElrsConfig {
                 rf_output_enabled: radio.elrs.rf_output_enabled,
                 wifi_manual_on: radio.elrs.wifi_manual_on,
                 tx_power_mw: normalize_power_level(radio.elrs.tx_power_mw),
-                bind_phrase,
             }
         }
         Err(_) => LocalElrsConfig::default(),
@@ -577,7 +383,6 @@ fn save_local_config(cfg: &LocalElrsConfig) -> Result<(), String> {
     radio.elrs.rf_output_enabled = cfg.rf_output_enabled;
     radio.elrs.wifi_manual_on = cfg.wifi_manual_on;
     radio.elrs.tx_power_mw = normalize_power_level(cfg.tx_power_mw);
-    radio.elrs.bind_phrase = cfg.bind_phrase.clone();
     store::save_radio_config(&radio).map_err(|err| err.to_string())
 }
 
@@ -598,44 +403,6 @@ fn normalize_power_level(raw: u16) -> u16 {
         .unwrap_or(100)
 }
 
-fn move_editor_cursor(frame: &mut UiFrame, delta: isize) {
-    let len = frame.elrs.editor_buffer.len().max(1);
-    if delta.is_negative() {
-        frame.elrs.editor_cursor = frame
-            .elrs
-            .editor_cursor
-            .saturating_sub(delta.unsigned_abs());
-    } else {
-        frame.elrs.editor_cursor = frame
-            .elrs
-            .editor_cursor
-            .saturating_add(delta as usize)
-            .min(len.saturating_sub(1));
-    }
-}
-
-fn cycle_editor_char(frame: &mut UiFrame, delta: isize) {
-    let mut bytes = frame.elrs.editor_buffer.as_bytes().to_vec();
-    if bytes.is_empty() {
-        bytes.push(LOCAL_EDITOR_CHARSET[0]);
-        frame.elrs.editor_cursor = 0;
-    }
-    if frame.elrs.editor_cursor >= bytes.len() {
-        frame.elrs.editor_cursor = bytes.len().saturating_sub(1);
-    }
-
-    let cursor = frame.elrs.editor_cursor;
-    let current = bytes[cursor];
-    let current_idx = LOCAL_EDITOR_CHARSET
-        .iter()
-        .position(|ch| *ch == current)
-        .unwrap_or(0);
-    let next_idx =
-        (current_idx as isize + delta).rem_euclid(LOCAL_EDITOR_CHARSET.len() as isize) as usize;
-    bytes[cursor] = LOCAL_EDITOR_CHARSET[next_idx];
-    frame.elrs.editor_buffer = String::from_utf8_lossy(&bytes).to_string();
-}
-
 #[cfg(test)]
 mod tests {
     use super::{local_feedback_target, set_local_feedback, SCRIPTS_APP};
@@ -647,7 +414,6 @@ mod tests {
         ui::{
             apps::{UiAppContext, UiAppModule},
             input::UiInputEvent,
-            keyboard::KeyboardField,
             model::UiFrame,
         },
     };
@@ -703,7 +469,7 @@ mod tests {
     }
 
     #[test]
-    fn test_bind_phrase_open_requires_second_confirm_to_show_keyboard() {
+    fn test_open_on_bind_row_does_not_arm_bind_phrase_keyboard() {
         let (config_tx, _config_rx) = Channel::<SystemConfigMsg>::new();
         let (active_model_tx, _active_model_rx) = Channel::<ActiveModelMsg>::new();
         let (elrs_cmd_tx, _elrs_cmd_rx) = Channel::<ElrsCommandMsg>::new();
@@ -717,25 +483,17 @@ mod tests {
             usb_gamepad_cmd_tx: &usb_gamepad_cmd_tx,
         };
         let mut frame = UiFrame::default();
-        frame.elrs.selected_idx = 4;
+        frame.elrs.selected_idx = 2;
 
         SCRIPTS_APP.on_event(&mut frame, UiInputEvent::Open, &ctx);
 
         assert!(frame.keyboard.is_none());
-        assert_eq!(frame.keyboard_armed_field, Some(KeyboardField::BindPhrase));
-        assert_eq!(
-            ui_feedback_rx.try_read().expect("feedback").message,
-            "Click to edit"
-        );
-
-        SCRIPTS_APP.on_event(&mut frame, UiInputEvent::Open, &ctx);
-
-        assert!(frame.keyboard.is_some());
         assert_eq!(frame.keyboard_armed_field, None);
+        let _ = ui_feedback_rx.try_read();
     }
 
     #[test]
-    fn test_bind_phrase_keyboard_submit_rejects_invalid_value() {
+    fn test_keyboard_submit_is_ignored() {
         let (config_tx, _config_rx) = Channel::<SystemConfigMsg>::new();
         let (active_model_tx, _active_model_rx) = Channel::<ActiveModelMsg>::new();
         let (elrs_cmd_tx, _elrs_cmd_rx) = Channel::<ElrsCommandMsg>::new();
@@ -752,7 +510,7 @@ mod tests {
 
         assert!(!SCRIPTS_APP.on_keyboard_submit(
             &mut frame,
-            KeyboardField::BindPhrase,
+            crate::ui::keyboard::KeyboardField::BindPhrase,
             "ABC",
             &ctx
         ));
