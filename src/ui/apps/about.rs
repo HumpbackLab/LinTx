@@ -17,12 +17,9 @@ pub static ABOUT_APP: AboutApp = AboutApp;
 impl UiAppModule for AboutApp {
     fn on_event(&self, _frame: &mut UiFrame, _event: UiInputEvent, _ctx: &UiAppContext<'_>) {}
 
-    fn render_terminal_detail(&self, frame: &UiFrame) -> String {
+    fn render_terminal_detail(&self, _frame: &UiFrame) -> String {
         format!(
-            "LinTX\n\nRemote Battery: {}%\nAircraft Battery: {}%\nSignal: {}%\n\nEsc Back",
-            frame.status.remote_battery_percent,
-            frame.status.aircraft_battery_percent,
-            frame.status.signal_strength_percent,
+            "LinTx\n\nTeam: HumpbackLab\nProduct: LinTx\nVersion: 0.0.1 preview\n\nEsc Back",
         )
     }
 }

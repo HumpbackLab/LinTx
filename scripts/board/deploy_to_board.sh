@@ -19,6 +19,15 @@ fi
 
 cd "$REPO_ROOT"
 
+$SSH_CMD "for comm in /proc/[0-9]*/comm; do \
+    [ -r \"\$comm\" ] || continue; \
+    [ \"\$(cat \"\$comm\" 2>/dev/null || true)\" = \"LinTx\" ] || continue; \
+    pid=\${comm%/comm}; \
+    pid=\${pid##*/}; \
+    kill \"\$pid\" 2>/dev/null || true; \
+done; \
+rm -f /tmp/lintx-rpsocket"
+
 $SSH_CMD "mkdir -p '$BOARD_DIR'"
 
 tar \

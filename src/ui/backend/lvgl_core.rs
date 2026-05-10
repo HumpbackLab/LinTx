@@ -791,29 +791,25 @@ impl LvglUiCore {
                     feedback: frame.interaction_feedback.clone(),
                 }
             }
-            _ => {
-                let spec = app_spec(app);
-                let badge = spec.title.to_string();
-                AppTemplateData {
-                    accent: spec.accent,
-                    title: format!("{} Workspace", badge),
-                    badge,
-                    subtitle: "Template placeholder".to_string(),
-                    metric_titles: ["Metric A".to_string(), "Metric B".to_string()],
-                    metric_values: ["--".to_string(), "--".to_string()],
-                    metric_progress: [0, 0],
-                    list_title: "Details".to_string(),
-                    list_lines: [
-                        "No data".to_string(),
-                        "No data".to_string(),
-                        "No data".to_string(),
-                        "No data".to_string(),
-                    ],
-                    list_row_ids: [None, None, None, None],
-                    hint: "Swipe right: Back".to_string(),
-                    feedback: frame.interaction_feedback.clone(),
-                }
-            }
+            AppId::About => AppTemplateData {
+                accent: spec.accent,
+                badge: "ABOUT".to_string(),
+                title: "LinTx".to_string(),
+                subtitle: "HumpbackLab".to_string(),
+                metric_titles: ["Product".to_string(), "Version".to_string()],
+                metric_values: ["LinTx".to_string(), "0.0.1 preview".to_string()],
+                metric_progress: [0, 0],
+                list_title: "Product Info".to_string(),
+                list_lines: [
+                    "Team: HumpbackLab".to_string(),
+                    "Product: LinTx".to_string(),
+                    "Version: 0.0.1 preview".to_string(),
+                    String::new(),
+                ],
+                list_row_ids: [None, None, None, None],
+                hint: "Swipe right: Back".to_string(),
+                feedback: frame.interaction_feedback.clone(),
+            },
         }
     }
 
@@ -2851,5 +2847,27 @@ impl LvglUiCore {
         self.last_page = Some(frame.page);
         self.last_launcher_page = frame.launcher_page;
         self.update_keyboard_overlay(frame, &ui);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LvglUiCore;
+    use crate::ui::model::{AppId, UiFrame};
+
+    #[test]
+    fn about_app_uses_product_identity_content() {
+        let core = LvglUiCore::new(800, 480);
+        let frame = UiFrame::default();
+
+        let data = core.app_template_data(&frame, AppId::About);
+
+        assert_eq!(data.badge, "ABOUT");
+        assert_eq!(data.title, "LinTx");
+        assert_eq!(data.subtitle, "HumpbackLab");
+        assert_eq!(data.list_title, "Product Info");
+        assert_eq!(data.list_lines[0], "Team: HumpbackLab");
+        assert_eq!(data.list_lines[1], "Product: LinTx");
+        assert_eq!(data.list_lines[2], "Version: 0.0.1 preview");
     }
 }
