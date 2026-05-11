@@ -112,6 +112,10 @@ fn publish_state(
     });
 }
 
+fn should_publish_report_progress(report_count: u32, elapsed: Duration) -> bool {
+    report_count == 1 || report_count % 100 == 0 || elapsed >= Duration::from_secs(1)
+}
+
 pub fn usb_gamepad_main(argc: u32, argv: *const &str) {
     let arg_ret = client_process_args::<Cli>(argc, argv);
     if arg_ret.is_none() {
@@ -266,8 +270,7 @@ pub fn usb_gamepad_main(argc: u32, argv: *const &str) {
             return;
         }
 
-        // 打印调试信息（每100次打印一次）
-        if counter % 100 == 0 {
+        if should_publish_report_progress(counter, last_state_publish.elapsed()) {
             publish_state(
                 &state_tx,
                 &args.device,
@@ -277,6 +280,10 @@ pub fn usb_gamepad_main(argc: u32, argv: *const &str) {
                 format!("sent {} HID reports", counter),
             );
             last_state_publish = Instant::now();
+        }
+
+        // 打印调试信息（每100次打印一次）
+        if counter % 100 == 0 {
             thread_logln!(
                 "HID[{}]: LX={} LY={} RX={} RY={}",
                 counter,
@@ -292,4 +299,29 @@ pub fn usb_gamepad_main(argc: u32, argv: *const &str) {
 #[rpos::ctor::ctor]
 fn register() {
     rpos::module::Module::register("usb_gamepad", usb_gamepad_main);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_publish_report_progress;
+    use std::time::Duration;
+
+    #[test]
+    fn test_publish_report_progress_on_first_report() {
+        assert!(should_publish_report_progress(1, Duration::from_millis(10)));
+    }
+
+    #[test]
+    fn test_publish_report_progress_periodically_for_low_rate_streams() {
+        assert!(should_publish_report_progress(42, Duration::from_secs(1)));
+        assert!(!should_publish_report_progress(
+            42,
+            Duration::from_millis(500)
+        ));
+    }
+
+    #[test]
+    fn test_publish_report_progress_on_report_milestones() {
+        assert!(should_publish_report_progress(100, Duration::from_millis(10)));
+    }
 }

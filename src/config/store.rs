@@ -1,6 +1,6 @@
 use std::{
     fs,
-    io::{self, ErrorKind},
+    io::{self, ErrorKind, Write},
     path::{Path, PathBuf},
 };
 
@@ -13,13 +13,17 @@ pub(crate) static TEST_CWD_MUTEX: std::sync::LazyLock<std::sync::Mutex<()>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
 
 pub const RADIO_CONFIG_PATH: &str = "radio.toml";
+pub const RADIO_CONFIG_EXAMPLE_PATH: &str = "radio.toml.example";
 pub const MODELS_DIR: &str = "models";
+const RADIO_CONFIG_EXAMPLE: &str = include_str!("../../radio.toml.example");
 
 pub fn ensure_default_layout() -> io::Result<()> {
     fs::create_dir_all(MODELS_DIR)?;
 
     if !Path::new(RADIO_CONFIG_PATH).exists() {
-        save_radio_config(&RadioConfig::default())?;
+        restore_radio_config_from_example()?;
+    } else if load_radio_config().is_err() {
+        restore_radio_config_from_example()?;
     }
 
     if list_model_paths()?.is_empty() {
@@ -53,7 +57,7 @@ pub fn load_radio_config() -> io::Result<RadioConfig> {
 pub fn save_radio_config(config: &RadioConfig) -> io::Result<()> {
     let content = toml::to_string_pretty(config)
         .map_err(|err| io::Error::new(ErrorKind::InvalidData, err))?;
-    fs::write(RADIO_CONFIG_PATH, content)
+    write_string_atomically(RADIO_CONFIG_PATH, &content)
 }
 
 pub fn list_models() -> io::Result<Vec<ModelConfig>> {
@@ -78,7 +82,8 @@ pub fn save_model_config(config: &ModelConfig) -> io::Result<()> {
     fs::create_dir_all(MODELS_DIR)?;
     let content = toml::to_string_pretty(config)
         .map_err(|err| io::Error::new(ErrorKind::InvalidData, err))?;
-    fs::write(model_path(&config.id), content)
+    let path = model_path(&config.id);
+    write_string_atomically(&path, &content)
 }
 
 pub fn load_active_model() -> io::Result<ModelConfig> {
@@ -131,6 +136,26 @@ fn sanitize_id(id: &str) -> String {
     } else {
         sanitized
     }
+}
+
+fn restore_radio_config_from_example() -> io::Result<()> {
+    let _ = RADIO_CONFIG_EXAMPLE_PATH;
+    write_string_atomically(RADIO_CONFIG_PATH, RADIO_CONFIG_EXAMPLE)
+}
+
+fn write_string_atomically(path: impl AsRef<Path>, content: &str) -> io::Result<()> {
+    let path = path.as_ref();
+    let tmp_path = path.with_extension(format!(
+        "{}.tmp",
+        path.extension().and_then(|ext| ext.to_str()).unwrap_or("")
+    ));
+
+    let mut file = fs::File::create(&tmp_path)?;
+    file.write_all(content.as_bytes())?;
+    file.sync_all()?;
+    drop(file);
+    fs::rename(tmp_path, path)?;
+    Ok(())
 }
 
 fn sample_models() -> Vec<ModelConfig> {
@@ -214,6 +239,11 @@ mod tests {
 
     use super::*;
 
+    fn example_radio_config() -> io::Result<RadioConfig> {
+        toml::from_str(RADIO_CONFIG_EXAMPLE)
+            .map_err(|err| io::Error::new(ErrorKind::InvalidData, err))
+    }
+
     struct TestCwdGuard {
         original: PathBuf,
         test_dir: PathBuf,
@@ -259,5 +289,19 @@ mod tests {
         let model = set_active_model("rover").unwrap();
         assert_eq!(model.id, "rover");
         assert_eq!(load_radio_config().unwrap().active_model, "rover");
+    }
+
+    #[test]
+    fn test_ensure_default_layout_recovers_invalid_radio_config_from_example() {
+        let _serial = TEST_CWD_MUTEX.lock().unwrap();
+        let _guard = TestCwdGuard::new();
+        fs::write(RADIO_CONFIG_PATH, vec![0_u8; 64]).unwrap();
+
+        ensure_default_layout().unwrap();
+
+        let recovered = load_radio_config().unwrap();
+        assert_eq!(recovered, example_radio_config().unwrap());
+        assert!(Path::new(MODELS_DIR).exists());
+        assert!(!list_models().unwrap().is_empty());
     }
 }
