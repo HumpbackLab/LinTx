@@ -42,26 +42,125 @@ LinTx 不直接实现飞控侧模式逻辑。Angle、Horizon、Turtle、GPS Resc
 - 油门不低时，mixer 会强制 `CH5=0`
 
 ## 构建
-常用构建命令：
+
+LinTx 目前有两条常用构建路径：
+
+- 主机构建：用于 Linux 桌面开发、`cargo check`、`cargo test`
+- 交叉编译：用于生成 SG2002 板端 `riscv64gc-unknown-linux-musl` 可执行文件
+
+如果你是第一次在新机器上搭环境，建议先走“主机构建”，确认仓库和 Rust 工具链正常，再继续做交叉编译。
+
+### 1. 获取源码
+
+如果是全新机器，先把仓库连同子模块一起拉下来：
+
+```bash
+git clone --recursive <repo-url>
+cd LinTx_musl
+```
+
+如果仓库已经存在但还没同步子模块：
+
+```bash
+git submodule update --init --recursive
+```
+
+### 2. 主机构建
+
+#### 新机器需要准备什么
+
+- Rust 工具链
+- C/C++ 编译环境
+- `git`
+
+本机我验证时使用的是：
+
+- `rustc 1.91.1`
+- `cargo 1.91.1`
+
+#### 常用命令
 
 ```bash
 cargo check
+cargo test
 cargo check --features sdl_ui
 cargo check --features lua
 cargo check --features joydev_input
+```
+
+用途说明：
+
+- `cargo check`：先验证默认 Linux host 构建是否正常
+- `cargo test`：运行仓库当前单元测试
+- `cargo check --features sdl_ui`：验证桌面 SDL UI 路径
+- `cargo check --features lua`：验证 Lua 扩展
+- `cargo check --features joydev_input`：验证 Linux `joydev` 输入支持
+
+建议第一次按这个顺序执行：
+
+```bash
+cargo check
+cargo test
+cargo check --features sdl_ui
+```
+
+如果这三步都正常，再继续看板端交叉编译。
+
+### 3. 交叉编译 SG2002 板端程序
+
+#### 当前仓库的交叉编译机制
+
+仓库通过 `cross` 调用 Docker 镜像来完成交叉编译。
+
+当前配置关系是：
+
+- [`Cross.toml`](/home/shimmer/LinTx/LinTx_musl/Cross.toml) 指定 `riscv64gc-unknown-linux-musl` 使用哪个 Docker 镜像
+- [`Dockerfile.riscv64`](/home/shimmer/LinTx/LinTx_musl/Dockerfile.riscv64) 定义这张镜像如何构建
+
+默认情况下，`Cross.toml` 期待你本机存在这张镜像：
+
+```toml
+[target.riscv64gc-unknown-linux-musl]
+image = "lintx-riscv64-cross:latest"
+```
+
+#### 编译前准备
+
+- Docker
+- `cross`
+- Rust 工具链
+
+本机我验证时使用的是：
+
+- `cross 0.2.5`
+- Docker 可正常执行 `docker build` 和 `docker run`
+
+#### 搭交叉编译环境
+
+1. 安装 `cross`
+
+```bash
+cargo install cross --git https://github.com/cross-rs/cross
+```
+
+2. 用仓库自带的 Dockerfile 构建交叉编译镜像
+
+```bash
+docker build -f Dockerfile.riscv64 -t lintx-riscv64-cross:latest .
+```
+
+这一步会基于 `ghcr.io/rust-cross/rust-musl-cross:riscv64gc-musl`，再额外编译并安装 `binutils 2.42`，目的是支持当前需要的较新 RISC-V 扩展。
+
+3. 跑交叉编译
+
+```bash
 cross build --target riscv64gc-unknown-linux-musl --release --features lvgl_ui
 ```
 
 说明：
 
 - `lvgl_ui`：板端 LVGL / framebuffer 图形界面
-- `sdl_ui`：桌面 SDL 窗口后端
-- `lua`：Lua 脚本扩展
-- `joydev_input`：Linux `joydev` 输入支持
-
-板端 GUI 构建产物位于：
-
-`target/riscv64gc-unknown-linux-musl/release/LinTx`
+- 构建产物：`target/riscv64gc-unknown-linux-musl/release/LinTx`
 
 ## 当前能力
 
